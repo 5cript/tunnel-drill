@@ -1004,6 +1004,17 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony import */ var os__
 
 /***/ }),
 
+/***/ "./broker/src/publisher.ts":
+/*!*********************************!*\
+  !*** ./broker/src/publisher.ts ***!
+  \*********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"default\": () => (__WEBPACK_DEFAULT_EXPORT__)\n/* harmony export */ });\nclass Publisher {\n    constructor() {\n        this.alias = 'WEE OOO';\n    }\n}\n/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (Publisher);\n\n\n//# sourceURL=webpack://tunnel-drill/./broker/src/publisher.ts?");
+
+/***/ }),
+
 /***/ "./broker/src/tunnel_broker.ts":
 /*!*************************************!*\
   !*** ./broker/src/tunnel_broker.ts ***!
@@ -1011,7 +1022,7 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony import */ var os__
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
-eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"default\": () => (__WEBPACK_DEFAULT_EXPORT__)\n/* harmony export */ });\n/* harmony import */ var https__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! https */ \"https\");\n/* harmony import */ var https__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(https__WEBPACK_IMPORTED_MODULE_0__);\n/* harmony import */ var express__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! express */ \"./node_modules/express/index.js\");\n/* harmony import */ var express__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(express__WEBPACK_IMPORTED_MODULE_1__);\n\n\nclass TunnelBroker {\n    constructor({ key, cert }) {\n        this.registerRoutes = () => {\n            this.app.use('/frontend', express__WEBPACK_IMPORTED_MODULE_1___default()[\"static\"]('app'));\n            this.app.get('/', (req, res) => {\n                res.redirect('/frontend/index.html');\n            });\n        };\n        this.start = (port) => {\n            this.server.listen(port);\n        };\n        this.app = express__WEBPACK_IMPORTED_MODULE_1___default()();\n        this.server = https__WEBPACK_IMPORTED_MODULE_0___default().createServer({ key, cert }, this.app);\n        this.registerRoutes();\n    }\n}\n/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (TunnelBroker);\n\n\n//# sourceURL=webpack://tunnel-drill/./broker/src/tunnel_broker.ts?");
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"default\": () => (__WEBPACK_DEFAULT_EXPORT__)\n/* harmony export */ });\n/* harmony import */ var https__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! https */ \"https\");\n/* harmony import */ var https__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(https__WEBPACK_IMPORTED_MODULE_0__);\n/* harmony import */ var express__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! express */ \"./node_modules/express/index.js\");\n/* harmony import */ var express__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(express__WEBPACK_IMPORTED_MODULE_1__);\n/* harmony import */ var _publisher__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./publisher */ \"./broker/src/publisher.ts\");\n\n\n\nclass TunnelBroker {\n    constructor({ key, cert }) {\n        this.registerRoutes = () => {\n            this.app.use('/frontend', express__WEBPACK_IMPORTED_MODULE_1___default()[\"static\"]('app'));\n            this.app.get('/', (req, res) => {\n                res.redirect('/frontend/index.html');\n            });\n            this.app.get('/api/publishers', (req, res) => {\n                res.send(this.publishers);\n            });\n            this.app.post('/api/publisher', (req, res) => {\n                // TODO:\n                this.publishers.push(new _publisher__WEBPACK_IMPORTED_MODULE_2__[\"default\"]());\n            });\n        };\n        this.start = (port) => {\n            this.server.listen(port);\n        };\n        this.app = express__WEBPACK_IMPORTED_MODULE_1___default()();\n        this.server = https__WEBPACK_IMPORTED_MODULE_0___default().createServer({ key, cert }, this.app);\n        this.registerRoutes();\n    }\n}\n/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (TunnelBroker);\n\n\n//# sourceURL=webpack://tunnel-drill/./broker/src/tunnel_broker.ts?");
 
 /***/ }),
 

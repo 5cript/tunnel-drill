@@ -15,14 +15,22 @@ import {
   useNavigate,
   Link
 } from "react-router-dom";
+import Backend from '../../backend_api/backend';
 
 const SidebarWidth = 240;
+const backend = new Backend();
 
 const Main = () => {
   const navigate = useNavigate();
 
   const navigateTo = (section, item) => {
     navigate('/frontend/' + section + '/' + item);
+  }
+
+  const getDashboard = () => {
+    return <Dashboard 
+      backend={backend}
+    />
   }
 
   return (
@@ -65,8 +73,8 @@ const Main = () => {
         <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
           <Toolbar />
           <Routes>
-            <Route path="*" element={<Dashboard />} />
-            <Route path="/frontend/0/Start" element={<Dashboard />} />
+            <Route path="*" element={getDashboard()} />
+            <Route path="/frontend/0/Start" element={getDashboard()} />
             <Route path="/frontend/0/TBD" element={<div>{"B"}</div>} />
             <Route path="/frontend/1/TBD" element={<div>{"C"}</div>} />
           </Routes>

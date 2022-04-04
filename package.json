@@ -8,7 +8,7 @@
     "build-dev": "webpack --mode development",
     "run": "cd dist && node ./broker.cjs",
     "front": "cd ./page && npm run build",
-    "dev": "npm-run-all front build-dev run"
+    "dev": "npm-run-all build-dev run"
   },
   "repository": {
     "type": "git",

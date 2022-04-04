@@ -11,11 +11,9 @@ import RecoilNexus from "recoil-nexus";
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <RecoilRoot>
-    <RecoilNexus>
       <BrowserRouter>
         <Main />
       </BrowserRouter>
-    </RecoilNexus>
   </RecoilRoot>
 );
 

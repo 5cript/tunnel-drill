@@ -45,11 +45,11 @@ export default function Sidebar({
         <Box sx={{ overflow: 'auto' }}>
           {
             sections.map((section, sectionIndex) => {
-              return <>
-                <List key={sectionIndex}>
+              return <div key={sectionIndex}>
+                <List>
                   {
                     section.items.map((item, index) => {
-                      return <ListItem button key={item.title} onClick={() => {
+                      return <ListItem button key={item.title + sectionIndex} onClick={() => {
                         onNavigate(sectionIndex, item.title);
                       }}>
                         <ListItemIcon>
@@ -61,7 +61,7 @@ export default function Sidebar({
                   }
                 </List>
                 <Divider key={'d' + sectionIndex}/>
-              </>
+              </div>
             })
           }
         </Box>
