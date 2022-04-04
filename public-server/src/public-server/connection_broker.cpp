@@ -1,4 +1,5 @@
 #include <public-server/connection_broker.hpp>
+#include <public-server/publisher.hpp>
 
 #include <boost/asio/ip/tcp.hpp>
 
@@ -14,10 +15,12 @@ struct ConnectionBroker::Implementation
 {
   boost::asio::ip::tcp::acceptor acceptor_;
   std::shared_mutex acceptorStopGuard_;
+  std::vector<std::shared_ptr<Publisher>> publishers_;
 
   Implementation(boost::asio::io_context& context)
     : acceptor_{context}
     , acceptorStopGuard_{}
+    , publishers_{}
   {}
 };
 //#####################################################################################################################
@@ -63,8 +66,7 @@ void ConnectionBroker::acceptOnce()
     std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor_.get_executor());
   impl_->acceptor_.async_accept(
     *socket,
-    [self = shared_from_this(), socket](
-      boost::system::error_code ec) mutable {
+    [self = shared_from_this(), socket](boost::system::error_code ec) mutable {
       std::shared_lock lock{self->impl_->acceptorStopGuard_};
 
       if (ec == boost::asio::error::operation_aborted)
@@ -74,10 +76,7 @@ void ConnectionBroker::acceptOnce()
         return;
 
       if (!ec)
-      {
-        // TODO: on accept
-        //acceptCallback(std::move(socket));
-      }
+        self->impl_->publishers_.emplace_back(std::move(*socket));
 
       self->acceptOnce();
     });

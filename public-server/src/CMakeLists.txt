@@ -1,5 +1,6 @@
 add_library(public-server-lib STATIC
   public-server/connection_broker.cpp
+  public-server/publisher.cpp
 )
 
 target_include_directories(
