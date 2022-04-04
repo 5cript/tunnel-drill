@@ -1,0 +1,3 @@
+[submodule "attender"]
+	path = attender
+	url = https://github.com/5cript/attender.git
