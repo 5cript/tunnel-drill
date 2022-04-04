@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "build-dev": "webpack --mode development",
-    "run": "node dist/broker.cjs",
+    "run": "cd dist && node ./broker.cjs",
     "front": "cd ./page && npm run build",
-    "dev": "npm-run-all build-dev front run"
+    "dev": "npm-run-all front build-dev run"
   },
   "repository": {
     "type": "git",

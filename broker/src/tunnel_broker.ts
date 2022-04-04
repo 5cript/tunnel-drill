@@ -14,9 +14,11 @@ class TunnelBroker
     }
 
     registerRoutes = () => {
+        this.app.use('/frontend', express.static('app'));
         this.app.get('/', (req, res) => {
-            
-        });
+            res.redirect('/frontend/index.html');
+        })
+        this.app.get('/api/publishers')
     }
 
     start = (port: number) => {

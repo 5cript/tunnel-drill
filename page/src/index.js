@@ -1,14 +1,22 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import './index.css';
-import App from './App';
+import ReactDOM from 'react-dom/client';
+import './styles/constants.css';
+import './styles/index.css';
+import Main from './frames/main/main';
 import reportWebVitals from './reportWebVitals';
+import { BrowserRouter } from "react-router-dom";
+import { RecoilRoot } from 'recoil';
+import RecoilNexus from "recoil-nexus";
 
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById('root')
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <RecoilRoot>
+    <RecoilNexus>
+      <BrowserRouter>
+        <Main />
+      </BrowserRouter>
+    </RecoilNexus>
+  </RecoilRoot>
 );
 
 // If you want to start measuring performance in your app, pass a function
