@@ -6,11 +6,14 @@
   "type": "module",
   "scripts": {
     "build-dev": "webpack --mode development",
-    "run": "cd dist && node ./broker.cjs",
+    "build": "webpack --mode production",
+    "run": "cd dist && node --inspect ./broker.cjs",
+    "run:prod": "cd dist && node ./broker.cjs",
     "front": "cd ./page && npm run build",
     "dev": "npm-run-all build-dev run",
     "run:publisher": "cd dist && node ./publisher.cjs",
-    "publisher": "npm-run-all build-dev run:publisher"
+    "publisher": "npm-run-all build-dev run:publisher",
+    "prod:broker": "npm-run-all build run:prod"
   },
   "repository": {
     "type": "git",

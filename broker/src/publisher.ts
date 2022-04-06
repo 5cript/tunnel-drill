@@ -179,15 +179,10 @@ class Publisher
         const doInitialConnect = (initialData: Buffer) => {
             console.log('New session for service', this.services[serviceId].name);
             const sessionId = generateUuid();
-            this.services[serviceId].sessions[sessionId] = new Session(socket, initialData);
             socket.on('error', (error) => {
                 console.log('Error in client socket for session Id', sessionId, error);
             })
-            socket.on('close', () => {
-                console.log('Session', sessionId, 'ended');
-                if (this.services[serviceId])
-                    this.freeSessionForService(serviceId, sessionId);
-            })
+            this.services[serviceId].sessions[sessionId] = new Session(socket, initialData);
             this.controlSocket.send(JSON.stringify({
                 type: 'NewSession',
                 serviceId: serviceId,
@@ -197,6 +192,9 @@ class Publisher
             } as NewSessionMessage));
         };
         const doPublisherConnect = ({sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
+            socket.on('error', (error) => {
+                console.log('Error in client socket for session Id', sessionId, error);
+            })
             console.log('Pipe connection from publisher open');
             this.services[serviceId].addSocketToHalfOpenSession(sessionId, socket);
             return;

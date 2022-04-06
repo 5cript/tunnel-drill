@@ -41,7 +41,12 @@ class TcpAcceptorPool
             // noDelay: true,
             // does not exist?
             // keepAlive: true,
-        }, onConnection);
+        }, (socket: net.Socket) => {
+            socket.on('error', (err) => {
+                console.log(err);
+            })
+            onConnection(socket);
+        });
 
         this.sockets[id].on('error', (error: any) => {
             if (error.code === 'EADDRINUSE') {
