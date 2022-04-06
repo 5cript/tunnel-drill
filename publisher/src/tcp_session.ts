@@ -1,7 +1,7 @@
 import net from 'net';
-import SharedConstants from './shared_constants';
+import SharedConstants from '../../shared/shared_constants';
 
-class Piper
+class TcpSession
 {
     public static readonly localConnectTimeout = 3000;
 
@@ -86,4 +86,4 @@ class Piper
     }
 }
 
-export default Piper;
+export default TcpSession;

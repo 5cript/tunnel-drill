@@ -7,6 +7,7 @@ import { NewSessionMessage, NewSessionFailedMessage } from '../../shared/control
 import compareAddressStrings from '../../util/ip';
 import { ServicesMessage } from '../../shared/control_messages/services';
 import SharedConstants from '../../shared/shared_constants';
+import UdpRelayPool from './relay_pool';
 
 class Session
 {
@@ -92,6 +93,7 @@ class Publisher
     controlSocket: WebSocket;
     services: {[key: string]: PublishedService};
     tcpServers: TcpAcceptorPool;
+    updRelays: UdpRelayPool;
     publisherAddress: string;
     messageMap: {[messageName: string]: (...args: any) => void}
 
@@ -129,13 +131,13 @@ class Publisher
         }
     }
 
-    onSessionFailed = ({localPort, remotePort, serviceId, sessionId, reason}: NewSessionFailedMessage) => {
+    onSessionFailed = ({localPort, remotePort, serviceId, sessionId, socketType, reason}: NewSessionFailedMessage) => {
         if (!this.services[serviceId])
         {
             console.log('onSessionFailed for unknown service id', serviceId);
             return;
         }
-        console.log(`session ${sessionId} failed for service ${serviceId}(${localPort}) for reason ${reason}`);
+        console.log(`session ${sessionId} failed for service ${serviceId}(${localPort}, ${socketType}) for reason ${reason}`);
         this.freeSessionForService(serviceId, sessionId);
     }
 

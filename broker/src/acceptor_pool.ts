@@ -74,12 +74,7 @@ class TcpAcceptorPool
     }
 }
 
-class UdpAcceptorPool
-{
-}
-
 export {
     TcpAcceptorPool,
-    UdpAcceptorPool,
     AcceptorHandle
 }

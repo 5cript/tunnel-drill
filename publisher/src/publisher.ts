@@ -4,45 +4,78 @@ import { ServiceInfo } from '../../shared/service';
 import { NewSessionMessage, NewSessionFailedMessage } from "../../shared/control_messages/new_session";
 import net from 'net';
 import { generateUuid } from "../../broker/src/util/id";
-import Piper from "../../shared/piper";
+import TcpSession from "./tcp_session";
+import UdpSession from "./udp_session";
 import { ServicesMessage } from "../../shared/control_messages/services";
-
-class TcpSession extends Piper
-{};
+import { UdpRelayBoundMessage } from "../../shared/control_messages/udp";
 
 class LocalService implements ServiceInfo
 {
     name?: string;
     localPort: number;
     remotePort: number;
-    sessions: {[id: string]: TcpSession}
+    socketType: string;
+    // TODO: improve only one is needed.
+    tcpSessions: {[id: string]: TcpSession}
+    udpSessions: {[id: string]: UdpSession}
 
-    constructor({remotePort, localPort, name}: {remotePort: number, localPort: number, name?: string}) 
+    constructor({remotePort, localPort, socketType, name}: 
+        {remotePort: number, localPort: number, socketType: string, name?: string}) 
     {
         this.name = name;
         this.localPort = localPort;
         this.remotePort = remotePort;
-        this.sessions = {};
+        this.socketType = socketType.toLowerCase();
+        this.tcpSessions = {};
+        this.udpSessions = {}
     }
 
-    createSession = (brokerHost: string, token: any) => {
+    createSession = (brokerHost: string, token: any, onBound: (port: number) => void) => {
         const id = generateUuid();
-        this.sessions[id] = new TcpSession(this.remotePort, this.localPort, brokerHost, JSON.stringify(token), () => {
-            this.freeSession(id);
-        });
+        if (this.socketType === 'tcp')
+        {
+            this.tcpSessions[id] = new TcpSession(this.remotePort, this.localPort, brokerHost, JSON.stringify(token), () => {
+                this.freeSession(id);
+            });
+        }
+        else
+        {
+            this.udpSessions[id] = new UdpSession({
+                remotePort: this.remotePort, 
+                localPort: this.localPort, 
+                brokerHost, 
+                socketType: this.socketType, 
+                token: JSON.stringify(token), 
+                onAnyClose: () => {
+                    this.freeSession(id);
+                },
+                onBound
+            });
+        }
         return id;
     }
 
     freeSession = (id: string) => {
-        if (this.sessions[id] === undefined)
-            return;
-        
-        this.sessions[id].free();
-        delete this.sessions[id];
+        if (this.socketType === 'tcp')
+        {
+            if (this.tcpSessions[id] === undefined)
+                return;
+            
+            this.tcpSessions[id].free();
+            delete this.tcpSessions[id];
+        }
+        else
+        {
+            if (this.udpSessions[id] === undefined)
+                return;
+            
+            this.udpSessions[id].free();
+            delete this.udpSessions[id];
+        }
     }
 
     freeAll = () => {
-        for (const sessionId in this.sessions) {
+        for (const sessionId in this.tcpSessions) {
             this.freeSession(sessionId);
         }
     }
@@ -65,6 +98,7 @@ class Publisher
             this.services[service.localPort] = new LocalService({
                 localPort: service.localPort, 
                 remotePort: service.remotePort,
+                socketType: service.socketType,
                 name: service.name
             });
         })
@@ -89,17 +123,12 @@ class Publisher
         }
     }
 
-    private onNewSession = ({sessionId, serviceId, localPort, remotePort}: {
-        sessionId: string,
-        serviceId: string,
-        localPort: number,
-        remotePort: number,
-    }) => {
+    private onNewSession = ({sessionId, serviceId, localPort, remotePort, socketType}: NewSessionMessage) => {
         console.log('New session for', localPort);
 
         const replyWithFailure = (reason: string) => {
             const reply: NewSessionFailedMessage = {
-                type: "NewSessionFailed", sessionId, serviceId, localPort, remotePort, reason
+                type: "NewSessionFailed", sessionId, serviceId, localPort, remotePort, reason, socketType
             }
             this.ws.send(JSON.stringify(reply));
         }
@@ -109,8 +138,19 @@ class Publisher
             replyWithFailure('There is no service here for that port.');
         }
 
+        const onBound = (port: number) => {
+            this.ws.send(JSON.stringify({
+                type: "UdpRelayBound",
+                sessionId,
+                serviceId,
+                localPort,
+                remotePort,
+                socketType,
+                relayPort: port
+            } as UdpRelayBoundMessage))
+        }
         try {
-            this.services[localPort].createSession(this.brokerHost, {sessionId, serviceId, localPort, remotePort});
+            this.services[localPort].createSession(this.brokerHost, {sessionId, serviceId, localPort, remotePort}, onBound);
         }
         catch (error) {
             replyWithFailure(error.message);
