@@ -25,9 +25,9 @@ class LocalService implements ServiceInfo
         this.sessions = {};
     }
 
-    createSession = (brokerHost: string) => {
+    createSession = (brokerHost: string, token: any) => {
         const id = generateUuid();
-        this.sessions[id] = new TcpSession(this.remotePort, this.localPort, brokerHost, () => {
+        this.sessions[id] = new TcpSession(this.remotePort, this.localPort, brokerHost, JSON.stringify(token), () => {
             this.freeSession(id);
         });
         return id;
@@ -110,7 +110,7 @@ class Publisher
         }
 
         try {
-            this.services[localPort].createSession(this.brokerHost);
+            this.services[localPort].createSession(this.brokerHost, {sessionId, serviceId, localPort, remotePort});
         }
         catch (error) {
             replyWithFailure(error.message);

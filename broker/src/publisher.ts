@@ -6,23 +6,28 @@ import { generateUuid } from './util/id';
 import { NewSessionMessage, NewSessionFailedMessage } from '../../shared/control_messages/new_session';
 import compareAddressStrings from '../../util/ip';
 import { ServicesMessage } from '../../shared/control_messages/services';
+import SharedConstants from '../../shared/shared_constants';
 
 class Session
 {
     clientSocket: net.Socket;
     publisherSocket: net.Socket | undefined;
+    initialData: Buffer;
 
-    constructor(socket: net.Socket)
+    constructor(socket: net.Socket, initialData: Buffer)
     {
         this.clientSocket = socket;
+        this.initialData = initialData;
         this.publisherSocket = undefined;
     }
 
     connect = (publisherSocket: net.Socket) => {
         this.publisherSocket = publisherSocket;
-        
-        this.clientSocket.pipe(this.publisherSocket);
-        this.publisherSocket.pipe(this.clientSocket);
+
+        this.publisherSocket.write(this.initialData, undefined, () => {
+            this.clientSocket.pipe(this.publisherSocket);
+            this.publisherSocket.pipe(this.clientSocket);
+        });
     }
 
     isHalfOpen = () => {
@@ -55,19 +60,16 @@ class PublishedService
         this.sessions = {};
     }
 
-    addSocketToAnyHalfOpenSession = (publisherSocket: net.Socket) => {
-        for (const sessionId in this.sessions) {
-            if (this.sessions[sessionId].isHalfOpen())
-            {
-                publisherSocket.on('error', (error) => {
-                    console.log('Error in publisher socket for session Id', sessionId, error);
-                })
-                publisherSocket.on('close', () => {
-                    this.freeSession(sessionId);
-                })
-                this.sessions[sessionId].connect(publisherSocket);
-                break;
-            }
+    addSocketToHalfOpenSession = (sessionId: string, publisherSocket: net.Socket) => {
+        if (this.sessions[sessionId].isHalfOpen())
+        {
+            publisherSocket.on('error', (error) => {
+                console.log('Error in publisher socket for session Id', sessionId, error);
+            })
+            publisherSocket.on('close', () => {
+                this.freeSession(sessionId);
+            })
+            this.sessions[sessionId].connect(publisherSocket);
         }
     }
 
@@ -167,35 +169,55 @@ class Publisher
     private onConnect = (serviceId: string, socket: net.Socket) => {
         if (!this.services[serviceId])
         {
+            socket.end();
             console.log('Connection opened for unknown service', serviceId);
             return;
         }
 
-        if (compareAddressStrings(socket.remoteAddress, this.publisherAddress))
-        {
+        const doInitialConnect = (initialData: Buffer) => {
+            console.log('New session for service', this.services[serviceId].name);
+            const sessionId = generateUuid();
+            this.services[serviceId].sessions[sessionId] = new Session(socket, initialData);
+            socket.on('error', (error) => {
+                console.log('Error in client socket for session Id', sessionId, error);
+            })
+            socket.on('close', () => {
+                console.log('Session', sessionId, 'ended');
+                if (this.services[serviceId])
+                    this.freeSessionForService(serviceId, sessionId);
+            })
+            this.controlSocket.send(JSON.stringify({
+                type: 'NewSession',
+                serviceId: serviceId,
+                sessionId: sessionId,
+                localPort: this.services[serviceId].localPort,
+                remotePort: this.services[serviceId].remotePort 
+            } as NewSessionMessage));
+        };
+        const doPublisherConnect = ({sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
             console.log('Pipe connection from publisher open');
-            this.services[serviceId].addSocketToAnyHalfOpenSession(socket);
+            this.services[serviceId].addSocketToHalfOpenSession(sessionId, socket);
             return;
         }
 
-        console.log('New session for service', this.services[serviceId].name);
-        const sessionId = generateUuid();
-        this.services[serviceId].sessions[sessionId] = new Session(socket);
-        socket.on('error', (error) => {
-            console.log('Error in client socket for session Id', sessionId, error);
-        })
-        socket.on('close', () => {
-            console.log('Session', sessionId, 'ended');
-            if (this.services[serviceId])
-                this.freeSessionForService(serviceId, sessionId);
-        })
-        this.controlSocket.send(JSON.stringify({
-            type: 'NewSession',
-            serviceId: serviceId,
-            sessionId: sessionId,
-            localPort: this.services[serviceId].localPort,
-            remotePort: this.services[serviceId].remotePort 
-        } as NewSessionMessage));
+        const sameAddress = compareAddressStrings(socket.remoteAddress, this.publisherAddress);
+        socket.once("data", (peekBuffer: Buffer) => {
+            try {
+                const token = JSON.parse(peekBuffer.toString('utf-8'));
+                if (token && token.sessionId && token.serviceId && sameAddress) 
+                {
+                    doPublisherConnect({
+                        sessionId: token.sessionId,
+                        serviceId: token.serviceId
+                    });
+                    return;
+                }
+            } catch(e)
+            {
+            }
+        
+            doInitialConnect(peekBuffer);
+        });
     }
 
     close = () => {
