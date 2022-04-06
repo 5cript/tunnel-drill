@@ -1,11 +1,13 @@
-import Publishers from './publishers'
+import Publishers from './publishers';
+import BackendBase from './backend_base';
 
-class Backend
+class Backend extends BackendBase
 {
     publishers: Publishers;
 
     constructor() {
-        this.publishers = new Publishers();
+        super();
+        this.publishers = new Publishers(this);
     }
 }
 

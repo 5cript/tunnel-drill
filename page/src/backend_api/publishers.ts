@@ -1,12 +1,15 @@
 import * as easyFetch from '@tkrotoff/fetch';
+import ApiBase from './api_base';
+import BackendBase from './backend_base';
 
-class Publishers
+class Publishers extends ApiBase
 {
-    constructor() {
+    constructor(backend: BackendBase) {
+        super(backend);
     }
 
     list = async () => {
-        return easyFetch.get('/api/publishers');
+        return easyFetch.get(this.url('/api/publishers')).json();
     }
 }
 

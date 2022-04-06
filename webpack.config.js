@@ -23,5 +23,14 @@ export default {
   },
   output: {
     path: path.resolve(__dirname, 'dist')
+  },
+  ignoreWarnings: [
+    {
+      module: /node_modules\/express\/lib\/view\.js/,
+      message: /the request of a dependency is an expression/,
+    }
+  ],
+  experiments: {
+    topLevelAwait: true
   }
 };

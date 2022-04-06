@@ -3,6 +3,7 @@ import { LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { publishersState } from '../../state/publishers';
 import { useRecoilState } from 'recoil';
 import Backend from '../../backend_api/backend';
+import { useEffect } from 'react';
 
 const data = [{name: 'Page A', uv: 400, pv: 2400, amt: 2400}];
 
@@ -11,9 +12,15 @@ const Dashboard = ({
 }) => {
     const [publishers, setPublishers] = useRecoilState(publishersState);
 
-    // backend.publishers.list().then((publishers) => {
-    //     setPublishers(publishers);
-    // });
+    // useEffect(() => {
+    //     setInterval(() => {
+    //         backend.publishers.list().then((publishers) => {
+    //             setPublishers(publishers);
+    //         });
+    //     }, 5000);
+    // }, []);
+
+    console.log(publishers);
 
     return <>
         <LineChart width={400} height={400} data={data}>
