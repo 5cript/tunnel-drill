@@ -40,9 +40,12 @@ class TcpSession
             winston.error(`Error with local socket for service with local port ${this.localPort}: ${error.message}`);
         })
         this.localSocket.on('close', () => {
-            this.remoteSocket.destroy();
-            this.remoteSocket.unref();
-            this.onAnyClose();
+            // FIXME: improveMe
+            setTimeout(() => {
+                this.remoteSocket.destroy();
+                this.remoteSocket.unref();
+                this.onAnyClose();
+            }, 5000); // 5 seconds to end all IO
         })
         this.localSocket.on('connect', () => {
             winston.info(`Both ends are open, starting to pipe between broker at ${this.remotePort} and service at ${this.localPort}`);
@@ -64,9 +67,12 @@ class TcpSession
             winston.error(`Error with remote socket for service with local port ${this.localPort}: ${error.message}`);
         })
         this.remoteSocket.on('close', () => {
-            this.localSocket.destroy();
-            this.localSocket.unref();
-            this.onAnyClose();
+            // FIXME: improveMe
+            setTimeout(() => {
+                this.localSocket.destroy();
+                this.localSocket.unref();
+                this.onAnyClose();
+            }, 5000) // 5 seconds to end all IO
         })
 
         this.remoteSocket.on('connect', () => {

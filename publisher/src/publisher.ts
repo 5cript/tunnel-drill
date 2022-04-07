@@ -124,7 +124,7 @@ class Publisher
     }
 
     private onNewSession = ({sessionId, serviceId, localPort, remotePort, socketType}: NewSessionMessage) => {
-        winston.info(`New session for ${localPort}`);
+        winston.info(`New session for ${localPort}.`);
 
         const replyWithFailure = (reason: string) => {
             const reply: NewSessionFailedMessage = {
