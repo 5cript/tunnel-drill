@@ -1,8 +1,3 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 export default {
   target: 'node',
   entry: {
@@ -20,9 +15,6 @@ export default {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
-  },
-  output: {
-    path: path.resolve(__dirname, 'dist')
   },
   ignoreWarnings: [
     {

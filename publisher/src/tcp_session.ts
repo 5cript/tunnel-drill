@@ -1,5 +1,6 @@
 import net from 'net';
 import SharedConstants from '../../shared/shared_constants';
+import winston from 'winston';
 
 class TcpSession
 {
@@ -9,12 +10,14 @@ class TcpSession
     localSocket: net.Socket;
     anyCloseWasCalled: boolean;
     localPort: number;
+    remotePort: number;
     onAnyClose: () => void;
 
     constructor(brokerPort: number, localPort: number, brokerHost: string, token: string, onAnyClose: () => void) 
     {
         this.anyCloseWasCalled = false;
         this.localPort = localPort;
+        this.remotePort = brokerPort;
 
         this.onAnyClose = () => {
             if (!this.anyCloseWasCalled)
@@ -34,16 +37,15 @@ class TcpSession
             port: this.localPort
         });
         this.localSocket.on('error', (error) => {
-            console.log(`Error with local socket for service with local port${this.localPort}`, error);
+            winston.error(`Error with local socket for service with local port ${this.localPort}: ${error.message}`);
         })
         this.localSocket.on('close', () => {
-            console.log('Local closed.');
             this.remoteSocket.destroy();
             this.remoteSocket.unref();
             this.onAnyClose();
         })
         this.localSocket.on('connect', () => {
-            console.log('Both ends are open, starting to pipe.');
+            winston.info(`Both ends are open, starting to pipe between broker at ${this.remotePort} and service at ${this.localPort}`);
             this.localSocket.write(initialData, undefined, () => {
                 this.remoteSocket.pipe(this.localSocket);
                 this.localSocket.pipe(this.remoteSocket);
@@ -59,10 +61,9 @@ class TcpSession
             port: brokerPort
         });
         this.remoteSocket.on('error', (error) => {
-            console.log(`Error with remote socket for service with local port${this.localPort}`, error);
+            winston.error(`Error with remote socket for service with local port ${this.localPort}: ${error.message}`);
         })
         this.remoteSocket.on('close', () => {
-            console.log('Remote closed.');
             this.localSocket.destroy();
             this.localSocket.unref();
             this.onAnyClose();

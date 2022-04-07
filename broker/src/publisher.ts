@@ -8,6 +8,7 @@ import compareAddressStrings from '../../util/ip';
 import { ServicesMessage } from '../../shared/control_messages/services';
 import SharedConstants from '../../shared/shared_constants';
 import UdpRelayPool from './relay_pool';
+import winston from 'winston';
 
 class Session
 {
@@ -38,11 +39,13 @@ class Session
     }
 
     free = () => {
-        // FIXME: 
-        // this.clientSocket.destroy();
-        // this.clientSocket.unref();
-        // this.publisherSocket?.destroy();
-        // this.publisherSocket?.unref();
+        // FIXME: Improve me:
+        setTimeout(() => {
+            this.clientSocket.destroy();
+            this.clientSocket.unref();
+            this.publisherSocket?.destroy();
+            this.publisherSocket?.unref();
+        }, 5000); // 5 seconds to end all IO
     }
 };
 
@@ -68,7 +71,7 @@ class PublishedService
         if (this.sessions[sessionId].isHalfOpen())
         {
             publisherSocket.on('error', (error) => {
-                console.log('Error in publisher socket for session Id', sessionId, error);
+                winston.error(`Error in publisher socket for session id ${sessionId} with error ${error.message}`);
             })
             publisherSocket.on('close', () => {
                 this.freeSession(sessionId);
@@ -111,7 +114,6 @@ class Publisher
         socket.on('message', (data, isBinary) => {
             if (!isBinary) {
                 const msg = JSON.parse(data.toString());
-                console.log('Message from publisher:', msg);
                 this.messageMap[msg.type](msg);
             }
         })
@@ -137,10 +139,10 @@ class Publisher
     onSessionFailed = ({localPort, remotePort, serviceId, sessionId, socketType, reason}: NewSessionFailedMessage) => {
         if (!this.services[serviceId])
         {
-            console.log('onSessionFailed for unknown service id', serviceId);
+            winston.error(`onSessionFailed for unknown service id ${serviceId}.`);
             return;
         }
-        console.log(`session ${sessionId} failed for service ${serviceId}(${localPort}, ${socketType}) for reason ${reason}`);
+        winston.error(`session ${sessionId} failed for service ${serviceId}(${localPort}, ${socketType}) for reason ${reason}`);
         this.freeSessionForService(serviceId, sessionId);
     }
 
@@ -175,15 +177,15 @@ class Publisher
         if (!this.services[serviceId])
         {
             socket.end();
-            console.log('Connection opened for unknown service', serviceId);
+            winston.error(`Connection opened for unknown service ${serviceId}`);
             return;
         }
 
         const doInitialConnect = (socket: net.Socket, initialData: Buffer) => {
-            console.log('New session for service', this.services[serviceId].name);
+            winston.info(`New session for service ${this.services[serviceId].name}`);
             const sessionId = generateUuid();
             socket.on('error', (error) => {
-                console.log('Error in client socket for session Id', sessionId, error);
+                winston.error(`Error in client socket for session id ${sessionId}: ${error.message}.`);
             })
             this.services[serviceId].sessions[sessionId] = new Session(socket, initialData);
             this.controlSocket.send(JSON.stringify({
@@ -196,7 +198,7 @@ class Publisher
         };
         const doPublisherConnect = (socket: net.Socket, {sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
             socket.on('error', (error) => {
-                console.log('Error in client socket for session Id', sessionId, error);
+                winston.error(`Error in client socket for session id ${sessionId}: ${error.message}.`);
             })
             this.services[serviceId].addSocketToHalfOpenSession(sessionId, socket);
             return;

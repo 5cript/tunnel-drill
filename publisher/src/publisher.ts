@@ -8,6 +8,7 @@ import TcpSession from "./tcp_session";
 import UdpSession from "./udp_session";
 import { ServicesMessage } from "../../shared/control_messages/services";
 import { UdpRelayBoundMessage } from "../../shared/control_messages/udp";
+import winston from 'winston';
 
 class LocalService implements ServiceInfo
 {
@@ -106,7 +107,6 @@ class Publisher
 
         // register understood messages:
         this.messageMap["NewSession"] = (messageObject: NewSessionMessage) => {
-            console.log(messageObject);
             this.onNewSession(messageObject);
         }
         
@@ -124,7 +124,7 @@ class Publisher
     }
 
     private onNewSession = ({sessionId, serviceId, localPort, remotePort, socketType}: NewSessionMessage) => {
-        console.log('New session for', localPort);
+        winston.info(`New session for ${localPort}`);
 
         const replyWithFailure = (reason: string) => {
             const reply: NewSessionFailedMessage = {
@@ -134,7 +134,7 @@ class Publisher
         }
 
         if (!this.services[localPort]) {
-            console.log('There is no service for that port', localPort);
+            winston.error(`There is no service for that port ${localPort}`);
             replyWithFailure('There is no service here for that port.');
         }
 
@@ -154,7 +154,7 @@ class Publisher
         }
         catch (error) {
             replyWithFailure(error.message);
-            console.log('Error in pipe builtup', error);
+            winston.error(`Could not create session ${sessionId}.`);
         }
     }
 
@@ -162,36 +162,36 @@ class Publisher
         if (this.shallDie)
             return;
 
-        console.log("Trying to connect to broker", wsPath);
+        winston.info(`Trying to connect to broker ${wsPath}`);
         try {
             this.ws = new WebSocket(wsPath, {
                 rejectUnauthorized: false
             });
         } catch (error) {
-            console.log(error);
+            winston.error(`Exception in control line connect ${error.message}`);
             return;
         }
 
         this.ws.on('error', (error: any) => {
             if (error.code === 'ECONNREFUSED')
             {
-                console.log('Broker is offline');
+                winston.info('Broker is offline.');
             }
             else 
             {
-                console.log('Error on control connection', error);
+                winston.error(`Error on control connection ${error.message}`);
             }
         })
 
         this.ws.on('close', () => {
             if (!this.shallDie) {
-                console.log(`Connection to broker lost, retrying in ${this.connectRepeater.currentTime / 1000} seconds`);
+                winston.warn(`Connection to broker lost, retrying in ${this.connectRepeater.currentTime / 1000} seconds`);
                 this.connectRepeater.retry();
             }
         })
 
         this.ws.on('open', () => {
-            console.log('Connected to broker');
+            winston.info('Connected to broker.');
             this.connectRepeater.reset();
             this.ws.send(JSON.stringify({
                 type: "Services",
@@ -211,7 +211,7 @@ class Publisher
                 const msg = JSON.parse(data.toString());
                 const messageHandler = this.messageMap[msg.type];
                 if (!messageHandler) {
-                    console.log('There is no message handler for', msg.type, msg);
+                    winston.error(`There is no message handler for ${msg.type}`);
                     return;
                 }
                 messageHandler(msg);

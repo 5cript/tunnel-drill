@@ -1,6 +1,7 @@
 import net from 'net';
 import dgram from 'dgram';
 import { generateUuid } from './util/id';
+import winston from 'winston';
 
 interface SocketList<SocketType>
 {
@@ -43,14 +44,14 @@ class TcpAcceptorPool
             // keepAlive: true,
         }, (socket: net.Socket) => {
             socket.on('error', (err) => {
-                console.log(err);
+                winston.error(`Socket error ${err.message}, ${JSON.stringify(err)}.`);
             })
             onConnection(socket);
         });
 
         this.sockets[id].on('error', (error: any) => {
             if (error.code === 'EADDRINUSE') {
-                console.log('Address in use:', port);
+                winston.error(`Address is already in use ${port}.`);
                 this.freeAcceptor({id});
             }
         });
@@ -63,7 +64,7 @@ class TcpAcceptorPool
     freeAcceptor = (handle: AcceptorHandle) =>  {
         if (this.sockets[handle.id] === undefined)
         {
-            console.log('Acceptor for given handle', handle.id, 'does not exist.');
+            winston.warn(`Acceptor for given handle ${handle.id} does not exist.`);
             return;
         }
 

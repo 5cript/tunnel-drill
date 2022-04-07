@@ -3,3 +3,4 @@ exec-env
 build
 node_modules
 dist
+prod

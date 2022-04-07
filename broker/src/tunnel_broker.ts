@@ -7,6 +7,7 @@ import { generateUuid } from './util/id';
 import { ServiceInfo } from '../../shared/service';
 import Config from './config';
 import { TcpAcceptorPool } from "./acceptor_pool";
+import winston from 'winston';
 
 interface FrontendSession
 {
@@ -41,7 +42,7 @@ class TunnelBroker
     private setupWebSocket = () => {
         this.webSocket.on('connection', (socket: WebSocket, request) => {
             if (request.url === '/api/ws/frontend') {
-                console.log('New frontend session!');
+                winston.info('New frontend session.');
                 this.setupFrontendSession(socket, request);
             } else if (request.url === '/api/ws/publisher') {
                 this.setupPublisherSession(socket, request);
@@ -59,17 +60,19 @@ class TunnelBroker
             this.frontendSessions.delete(id);
         })
         socket.on('message', (data, isBinary) => {
-            console.log('Message from:', id, data);
+            if (!isBinary) {
+                winston.debug(`Message from frontend with id ${id}: ${data.toString('utf-8')}`);
+            }
         })
     }
 
     private setupPublisherSession = (socket: WebSocket, request: http.IncomingMessage) =>
     {
         const id = generateUuid();
-        console.log('New publisher connected with id', id);
+        winston.info(`New publisher connected with id ${id}`);
         this.publishers.set(id, new Publisher(socket, request.socket.remoteAddress, this.remainingLimit));
         socket.on('close', () => {
-            console.log('Publisher lost connection', id);
+            winston.info(`Publisher lost connection with id ${id}`);
             this.publishers.get(id).close();
             this.publishers.delete(id);
         })
@@ -77,7 +80,6 @@ class TunnelBroker
 
     private registerRoutes = () => {
         this.app.get('/', (req, res) => {
-            console.log('redirect');
             res.redirect('/frontend/index.html');
         })
         this.app.use('/frontend', express.static('app'));
