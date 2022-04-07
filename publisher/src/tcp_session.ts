@@ -37,13 +37,12 @@ class TcpSession
             console.log(`Error with local socket for service with local port${this.localPort}`, error);
         })
         this.localSocket.on('close', () => {
-            console.log('Local closed.');
-            this.remoteSocket.destroy();
-            this.remoteSocket.unref();
-            this.onAnyClose();
+            // FIXME: 
+            //this.remoteSocket.destroy();
+            //this.remoteSocket.unref();
+            //this.onAnyClose();
         })
         this.localSocket.on('connect', () => {
-            console.log('Both ends are open, starting to pipe.');
             this.localSocket.write(initialData, undefined, () => {
                 this.remoteSocket.pipe(this.localSocket);
                 this.localSocket.pipe(this.remoteSocket);
@@ -62,10 +61,10 @@ class TcpSession
             console.log(`Error with remote socket for service with local port${this.localPort}`, error);
         })
         this.remoteSocket.on('close', () => {
-            console.log('Remote closed.');
-            this.localSocket.destroy();
-            this.localSocket.unref();
-            this.onAnyClose();
+            // FIXME: 
+            // this.localSocket.destroy();
+            // this.localSocket.unref();
+            // this.onAnyClose();
         })
 
         this.remoteSocket.on('connect', () => {

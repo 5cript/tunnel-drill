@@ -106,7 +106,6 @@ class Publisher
 
         // register understood messages:
         this.messageMap["NewSession"] = (messageObject: NewSessionMessage) => {
-            console.log(messageObject);
             this.onNewSession(messageObject);
         }
         
@@ -124,8 +123,6 @@ class Publisher
     }
 
     private onNewSession = ({sessionId, serviceId, localPort, remotePort, socketType}: NewSessionMessage) => {
-        console.log('New session for', localPort);
-
         const replyWithFailure = (reason: string) => {
             const reply: NewSessionFailedMessage = {
                 type: "NewSessionFailed", sessionId, serviceId, localPort, remotePort, reason, socketType
