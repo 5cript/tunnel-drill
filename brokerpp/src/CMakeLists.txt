@@ -1,11 +1,12 @@
 add_library(broker-lib STATIC
-  brokerpp/connection_acceptor.cpp
   brokerpp/session.cpp
   brokerpp/controller.cpp
   brokerpp/control/control_session.cpp
   brokerpp/control/subscription.cpp
   brokerpp/control/dispatcher.cpp
   brokerpp/control/stream_parser.cpp
+  brokerpp/publisher/publisher.cpp
+  brokerpp/publisher/service.cpp
 )
 
 target_include_directories(

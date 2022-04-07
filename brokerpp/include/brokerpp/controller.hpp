@@ -1,5 +1,7 @@
 #pragma once
 
+#include <brokerpp/publisher/publisher.hpp>
+
 #include <attender/websocket/server/server.hpp>
 #include <attender/session/uuid_session_cookie_generator.hpp>
 
@@ -24,6 +26,8 @@ private:
     std::mutex guard_;
     std::unordered_map<std::string, std::shared_ptr<attender::websocket::connection>> connections_;
     attender::uuid_generator generator_;
+
+    std::unordered_map<std::string, std::shared_ptr<Publisher>> publishers_;
 };
 
 }

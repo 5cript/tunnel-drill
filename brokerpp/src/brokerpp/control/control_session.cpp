@@ -2,6 +2,7 @@
 #include <brokerpp/control/stream_parser.hpp>
 #include <brokerpp/control/dispatcher.hpp>
 #include <brokerpp/control/user.hpp>
+#include <brokerpp/controller.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -13,19 +14,23 @@ namespace TunnelBore::Broker
         std::string sessionId;
         bool authenticated;
         std::weak_ptr<ControlSession> session;
+        std::weak_ptr<Controller> controller;
         StreamParser textParser;
         Dispatcher dispatcher;
         User user;
+
+        std::vector<std::shared_ptr<Subscription>> subscriptions;
         
         void imbueOwner(std::weak_ptr<ControlSession> session);
 
-        Implementation(std::string sessionId);
+        Implementation(std::string sessionId, std::weak_ptr<Controller> controller);
     };
     //---------------------------------------------------------------------------------------------------------------------
-    ControlSession::Implementation::Implementation(std::string sessionId)
+    ControlSession::Implementation::Implementation(std::string sessionId, std::weak_ptr<Controller> controller)
         : sessionId{std::move(sessionId)}
         , authenticated{false}
         , session{}
+        , controller{controller}
         , textParser{}
         , dispatcher{}
     {}
@@ -37,11 +42,20 @@ namespace TunnelBore::Broker
     //#####################################################################################################################
     ControlSession::ControlSession(
         attender::websocket::connection* owner,
+        std::weak_ptr<Controller> controller,
         std::string sessionId
     )
         : attender::websocket::session_base{owner}
-        , impl_{std::make_unique<Implementation>(sessionId)}
+        , impl_{std::make_unique<Implementation>(sessionId, controller)}
     {
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::subscribe(
+        std::string const& type, 
+        std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback
+    )
+    {
+        impl_->subscriptions.push_back(impl_->dispatcher.subscribe(type, callback));
     }
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::~ControlSession() = default;
@@ -65,7 +79,7 @@ namespace TunnelBore::Broker
             ref = (*popped)["ref"];
 
         if (!popped->contains("type"))
-            return respondWithError((*popped)["ref"].get<int>(), "Type missing in message.");
+            return respondWithError((*popped)["ref"].get<std::string>(), "Type missing in message.");
 
         spdlog::info("Message '{}' received", (*popped)["type"].get<std::string>());
 
@@ -76,26 +90,28 @@ namespace TunnelBore::Broker
         catch (std::exception const& exc)
         {
             spdlog::error("Error in json consumer: {}", exc.what());
+            endSession();
         }
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onJson(json const& j, std::string const& ref)
     {
-        if (impl_->authenticated)
-            return impl_->dispatcher.dispatch(j, ref);
+        // TODO: Authentication:
+        //if (impl_->authenticated)
+        return impl_->dispatcher.dispatch(j, ref);
 
-        if (impl_->user.authenticate(j["payload"]))
-        {
-            impl_->authenticated = true;
-            writeJson(
-                json{
-                    {"ref", ref},
-                    {"authenticated", true},
-                },
-                [this](auto, auto) {
-                    onAfterAuthentication();
-                });
-        }
+        // if (impl_->user.authenticate(j["payload"]))
+        // {
+        //     impl_->authenticated = true;
+        //     writeJson(
+        //         json{
+        //             {"ref", ref},
+        //             {"authenticated", true},
+        //         },
+        //         [this](auto, auto) {
+        //             onAfterAuthentication();
+        //         });
+        // }
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::endSession()
@@ -140,7 +156,7 @@ namespace TunnelBore::Broker
         }
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::respondWithError(int ref, std::string const& msg)
+    void ControlSession::respondWithError(std::string const& ref, std::string const& msg)
     {
         spdlog::info("Responding with error: '{}'.");
         writeJson(json{
@@ -173,6 +189,16 @@ namespace TunnelBore::Broker
     void ControlSession::on_binary(char const*, std::size_t)
     {
         spdlog::warn("Binary was received, but cannot handle binary data.");
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::on_close()
+    {
+        spdlog::info("Control session was closed: {}", impl_->sessionId);
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::on_error(boost::system::error_code ec, char const*)
+    {
+        spdlog::info("Error in control session: {}.", ec.message());
     }
     //#####################################################################################################################
     
