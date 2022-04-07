@@ -4,7 +4,7 @@ module.exports = function(app) {
   app.use(
     '/api',
     createProxyMiddleware({
-      target: 'https://89.58.41.196:11800',
+      target: 'https://89.58.41.196:11805',
       changeOrigin: true,
       ignorePath: false,
       secure: false
@@ -13,7 +13,7 @@ module.exports = function(app) {
   
   app.use(
     createProxyMiddleware('/api/ws/frontend', {
-        target: 'wss://89.58.41.196:11800',
+        target: 'wss://89.58.41.196:11805',
         ws: true,
         changeOrigin: true,
         secure: false

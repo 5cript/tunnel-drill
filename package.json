@@ -13,7 +13,7 @@
     "dev": "npm-run-all build-dev run",
     "run:publisher": "cd dist && node ./publisher.cjs",
     "dev:publisher": "cd dist && DEV_BUILD=1 node ./publisher.cjs",
-    "publisher": "npm-run-all build-dev run:publisher",
+    "publisher": "npm-run-all build run:publisher",
     "devpub": "npm-run-all build-dev dev:publisher",
     "broker": "npm-run-all build run:prod"
   },
