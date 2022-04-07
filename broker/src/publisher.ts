@@ -26,8 +26,14 @@ class Session
         this.publisherSocket = publisherSocket;
 
         this.publisherSocket.write(this.initialData, undefined, () => {
-            this.clientSocket.pipe(this.publisherSocket);
+            // this.publisherSocket.on('data', (data) => {
+            //     this.clientSocket.write(data);
+            // })
+            // this.clientSocket.on('data', (data) => {
+            //     this.publisherSocket.write(data);
+            // })
             this.publisherSocket.pipe(this.clientSocket);
+            this.clientSocket.pipe(this.publisherSocket);
         });
     }
 
@@ -212,11 +218,15 @@ class Publisher
                     });
                     return;
                 }
-            } catch(e)
+            }
+            catch(e)
             {
             }
         
-            doInitialConnect(peekBuffer);
+            let initialBuf = Buffer.alloc(peekBuffer.length);
+            peekBuffer.copy(initialBuf);
+            console.log('initial read size:', initialBuf.length);
+            doInitialConnect(initialBuf);
         });
     }
 
