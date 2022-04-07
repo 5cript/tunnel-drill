@@ -38,10 +38,11 @@ class Session
     }
 
     free = () => {
-        this.clientSocket.destroy();
-        this.clientSocket.unref();
-        this.publisherSocket?.destroy();
-        this.publisherSocket?.unref();
+        // FIXME: 
+        // this.clientSocket.destroy();
+        // this.clientSocket.unref();
+        // this.publisherSocket?.destroy();
+        // this.publisherSocket?.unref();
     }
 };
 
@@ -197,7 +198,6 @@ class Publisher
             socket.on('error', (error) => {
                 console.log('Error in client socket for session Id', sessionId, error);
             })
-            console.log('Pipe connection from publisher open');
             this.services[serviceId].addSocketToHalfOpenSession(sessionId, socket);
             return;
         }
