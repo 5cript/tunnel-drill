@@ -26,14 +26,10 @@ class Session
         this.publisherSocket = publisherSocket;
 
         this.publisherSocket.write(this.initialData, undefined, () => {
-            // this.publisherSocket.on('data', (data) => {
-            //     this.clientSocket.write(data);
-            // })
-            // this.clientSocket.on('data', (data) => {
-            //     this.publisherSocket.write(data);
-            // })
             this.publisherSocket.pipe(this.clientSocket);
             this.clientSocket.pipe(this.publisherSocket);
+            this.publisherSocket.resume();
+            this.clientSocket.resume();
         });
     }
 
@@ -182,7 +178,7 @@ class Publisher
             return;
         }
 
-        const doInitialConnect = (initialData: Buffer) => {
+        const doInitialConnect = (socket: net.Socket, initialData: Buffer) => {
             console.log('New session for service', this.services[serviceId].name);
             const sessionId = generateUuid();
             socket.on('error', (error) => {
@@ -197,7 +193,7 @@ class Publisher
                 remotePort: this.services[serviceId].remotePort 
             } as NewSessionMessage));
         };
-        const doPublisherConnect = ({sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
+        const doPublisherConnect = (socket: net.Socket, {sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
             socket.on('error', (error) => {
                 console.log('Error in client socket for session Id', sessionId, error);
             })
@@ -208,14 +204,18 @@ class Publisher
 
         const sameAddress = compareAddressStrings(socket.remoteAddress, this.publisherAddress);
         socket.once("data", (peekBuffer: Buffer) => {
+            socket.pause();
             try {
                 const token = JSON.parse(peekBuffer.toString('utf-8'));
                 if (token && token.sessionId && token.serviceId && sameAddress) 
                 {
-                    doPublisherConnect({
-                        sessionId: token.sessionId,
-                        serviceId: token.serviceId
-                    });
+                    doPublisherConnect(
+                        socket, 
+                        {
+                            sessionId: token.sessionId,
+                            serviceId: token.serviceId
+                        }
+                    );
                     return;
                 }
             }
@@ -225,8 +225,7 @@ class Publisher
         
             let initialBuf = Buffer.alloc(peekBuffer.length);
             peekBuffer.copy(initialBuf);
-            console.log('initial read size:', initialBuf.length);
-            doInitialConnect(initialBuf);
+            doInitialConnect(socket, initialBuf);
         });
     }
 
