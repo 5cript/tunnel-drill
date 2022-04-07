@@ -15,18 +15,18 @@ namespace boost::asio::ip
   class basic_endpoint;
 }
 
-namespace TunnelBore::PublicServer
+namespace TunnelBore::Broker
 {
 
-class ConnectionBroker : public std::enable_shared_from_this<ConnectionBroker>
+class ConnectionAcceptor : public std::enable_shared_from_this<ConnectionAcceptor>
 {
 public:
-  ConnectionBroker(boost::asio::io_context& context);
-  ~ConnectionBroker();
-  ConnectionBroker(ConnectionBroker const&) = delete;
-  ConnectionBroker(ConnectionBroker&&);
-  ConnectionBroker& operator=(ConnectionBroker const&) = delete;
-  ConnectionBroker& operator=(ConnectionBroker&&);
+  ConnectionAcceptor(boost::asio::io_context& context);
+  ~ConnectionAcceptor();
+  ConnectionAcceptor(ConnectionAcceptor const&) = delete;
+  ConnectionAcceptor(ConnectionAcceptor&&);
+  ConnectionAcceptor& operator=(ConnectionAcceptor const&) = delete;
+  ConnectionAcceptor& operator=(ConnectionAcceptor&&);
 
   boost::leaf::result<void> start(boost::asio::ip::basic_endpoint<boost::asio::ip::tcp> const& bindEndpoint);
   void stop();

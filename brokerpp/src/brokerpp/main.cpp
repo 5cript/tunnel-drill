@@ -1,4 +1,4 @@
-#include <public-server/connection_broker.hpp>
+//#include <brokerpp/connection_broker.hpp>
 
 #include <attender/io_context/thread_pooler.hpp>
 #include <attender/io_context/managed_io_context.hpp>
@@ -11,7 +11,7 @@ constexpr static auto IoContextThreadPoolSize = 8;
 
 int main() 
 {
-  using namespace TunnelBore::PublicServer;
+  //using namespace TunnelBore::Broker;
 
   attender::managed_io_context <attender::thread_pooler> context
   {
@@ -28,5 +28,5 @@ int main()
     }
   };
 
-  ConnectionBroker broker{*context.get_io_context()};
+  //ConnectionAcceptor broker{*context.get_io_context()};
 }

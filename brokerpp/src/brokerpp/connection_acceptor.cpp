@@ -1,5 +1,5 @@
-#include <public-server/connection_broker.hpp>
-#include <public-server/publisher.hpp>
+#include <brokerpp/connection_acceptor.hpp>
+#include <brokerpp/session.hpp>
 
 #include <boost/asio/ip/tcp.hpp>
 
@@ -8,34 +8,37 @@
 
 namespace leaf = boost::leaf;
 
-namespace TunnelBore::PublicServer
+namespace TunnelBore::Broker
 {
 //#####################################################################################################################
-struct ConnectionBroker::Implementation
+struct ConnectionAcceptor::Implementation
 {
   boost::asio::ip::tcp::acceptor acceptor_;
   std::shared_mutex acceptorStopGuard_;
-  std::vector<std::shared_ptr<Publisher>> publishers_;
+  std::vector<std::shared_ptr<Session>> sessions_;
 
   Implementation(boost::asio::io_context& context)
     : acceptor_{context}
     , acceptorStopGuard_{}
-    , publishers_{}
+    , sessions_{}
   {}
 };
 //#####################################################################################################################
-ConnectionBroker::ConnectionBroker(boost::asio::io_context& context)
+ConnectionAcceptor::ConnectionAcceptor(boost::asio::io_context& context)
   : impl_{std::make_unique<Implementation>(context)}
 {
 }
 //---------------------------------------------------------------------------------------------------------------------
-ConnectionBroker::~ConnectionBroker() = default;
+ConnectionAcceptor::~ConnectionAcceptor()
+{
+  stop();
+}
 //---------------------------------------------------------------------------------------------------------------------
-ConnectionBroker::ConnectionBroker(ConnectionBroker&&) = default;
+ConnectionAcceptor::ConnectionAcceptor(ConnectionAcceptor&&) = default;
 //---------------------------------------------------------------------------------------------------------------------
-ConnectionBroker& ConnectionBroker::operator=(ConnectionBroker&&) = default;
+ConnectionAcceptor& ConnectionAcceptor::operator=(ConnectionAcceptor&&) = default;
 //---------------------------------------------------------------------------------------------------------------------
-boost::leaf::result<void> ConnectionBroker::start(boost::asio::ip::tcp::endpoint const& bindEndpoint)
+boost::leaf::result<void> ConnectionAcceptor::start(boost::asio::ip::tcp::endpoint const& bindEndpoint)
 {
   stop();
   boost::system::error_code ec;
@@ -60,7 +63,7 @@ boost::leaf::result<void> ConnectionBroker::start(boost::asio::ip::tcp::endpoint
   return {};
 }
 //---------------------------------------------------------------------------------------------------------------------
-void ConnectionBroker::acceptOnce()
+void ConnectionAcceptor::acceptOnce()
 {
   std::shared_ptr<boost::asio::ip::tcp::socket> socket =
     std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor_.get_executor());
@@ -76,13 +79,13 @@ void ConnectionBroker::acceptOnce()
         return;
 
       if (!ec)
-        self->impl_->publishers_.emplace_back(std::move(*socket));
+        self->impl_->sessions_.push_back(std::make_shared<Session>(std::move(*socket)));
 
       self->acceptOnce();
     });
 }
 //---------------------------------------------------------------------------------------------------------------------
-void ConnectionBroker::stop()
+void ConnectionAcceptor::stop()
 {
   std::unique_lock lock{impl_->acceptorStopGuard_};
   impl_->acceptor_.close();

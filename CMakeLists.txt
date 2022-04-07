@@ -9,5 +9,5 @@ add_subdirectory(attender)
 add_subdirectory(spdlog)
 
 # Project Native
-add_subdirectory(private-server/src)
-add_subdirectory(public-server/src)
+add_subdirectory(brokerpp/src)
+add_subdirectory(publisherpp/src)

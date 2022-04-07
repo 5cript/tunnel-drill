@@ -1,9 +1,9 @@
-#include <public-server/publisher.hpp>
+#include <brokerpp/session.hpp>
 
-namespace TunnelBore::PublicServer
+namespace TunnelBore::Broker
 {
 //#####################################################################################################################
-    struct Publisher::Implementation
+    struct Session::Implementation
     {
         boost::asio::ip::tcp::socket socket_;
 
@@ -12,24 +12,24 @@ namespace TunnelBore::PublicServer
         {}
     };
 //#####################################################################################################################
-    Publisher::Publisher(boost::asio::ip::tcp::socket&& socket)
+    Session::Session(boost::asio::ip::tcp::socket&& socket)
         : impl_{std::make_unique<Implementation>(std::move(socket))}
     {
     }
 //---------------------------------------------------------------------------------------------------------------------
-    void Publisher::close()
+    void Session::close()
     {
         boost::system::error_code ignore;
-        socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignore);
+        impl_->socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignore);
     }
 //---------------------------------------------------------------------------------------------------------------------
-    Publisher::~Publisher()
+    Session::~Session()
     {
         close();
     }
 //---------------------------------------------------------------------------------------------------------------------
-    Publisher::Publisher(Publisher&&) = default;
+    Session::Session(Session&&) = default;
 //---------------------------------------------------------------------------------------------------------------------
-    Publisher& Publisher::operator=(Publisher&&) = default;
+    Session& Session::operator=(Session&&) = default;
 //#####################################################################################################################
 }

@@ -54,6 +54,9 @@ class TcpAcceptorPool
                 winston.error(`Address is already in use ${port}.`);
                 this.freeAcceptor({id});
             }
+            else {
+                winston.error(`Some error in server for port ${port}: ${JSON.stringify(error)}`);
+            }
         });
 
         this.sockets[id].listen(port);

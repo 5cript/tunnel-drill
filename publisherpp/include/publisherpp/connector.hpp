@@ -1,6 +1,6 @@
 #pragma once
 
-namespace TunnelBore::PrivateServer
+namespace TunnelBore::Publisher
 {
   class Connector
   {
