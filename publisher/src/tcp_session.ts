@@ -47,6 +47,7 @@ class TcpSession
             this.localSocket.write(initialData, undefined, () => {
                 this.remoteSocket.pipe(this.localSocket);
                 this.localSocket.pipe(this.remoteSocket);
+                this.remoteSocket.resume();
             })
         })
     }
@@ -71,6 +72,7 @@ class TcpSession
             this.remoteSocket.write(token, 'utf-8', () => {
             });
             this.remoteSocket.once('data', (buffer) => {
+                this.remoteSocket.pause();
                 let initialBuf = Buffer.alloc(buffer.length);
                 buffer.copy(initialBuf);
                 this.connectLocalSocket(initialBuf);
