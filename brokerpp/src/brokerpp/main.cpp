@@ -35,6 +35,8 @@ int main()
     spdlog::error("Error in websocket control line ({}).", ec.message());
   });
   controller->start(ControllerPort);
+  spdlog::info("Bound on port '{}'", ControllerPort);
+  std::cin.get();
 
   //ConnectionAcceptor broker{*context.get_io_context()};
 }

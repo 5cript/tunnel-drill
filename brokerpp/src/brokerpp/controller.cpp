@@ -1,12 +1,16 @@
 #include <brokerpp/controller.hpp>
 #include <brokerpp/control/control_session.hpp>
+#include <brokerpp/load_home_file.hpp>
 #include <spdlog/spdlog.h>
 
 namespace TunnelBore::Broker
 {
 //#####################################################################################################################
 Controller::Controller(boost::asio::io_context& context, std::function <void(boost::system::error_code)> on_error)
-    : ws_{&context, std::move(on_error)}
+    : ws_{&context, std::move(on_error), attender::websocket::security_parameters{
+        .key = loadHomeFile("key.pem"),
+        .cert = loadHomeFile("cert.pem")
+    }}
 {
 }
 //---------------------------------------------------------------------------------------------------------------------

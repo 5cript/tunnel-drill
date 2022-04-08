@@ -9,6 +9,7 @@ import UdpSession from "./udp_session";
 import { ServicesMessage } from "../../shared/control_messages/services";
 import { UdpRelayBoundMessage } from "../../shared/control_messages/udp";
 import winston from 'winston';
+import { HandshakeMessage } from "../../shared/control_messages/handshake";
 
 class LocalService implements ServiceInfo
 {
@@ -28,7 +29,7 @@ class LocalService implements ServiceInfo
         this.remotePort = remotePort;
         this.socketType = socketType.toLowerCase();
         this.tcpSessions = {};
-        this.udpSessions = {}
+        this.udpSessions = {};
     }
 
     createSession = (brokerHost: string, token: any, onBound: (port: number) => void) => {
@@ -90,8 +91,11 @@ class Publisher
     messageMap: {[messageName: string]: (...args: any) => void}
     brokerHost: string;
     shallDie: boolean;
+    identity: string;
 
     constructor(wsPath: string, services: Array<ServiceInfo>, brokerHost: string) {
+        // FIXME: something better, needs to be solved with authentication later:
+        this.identity = generateUuid();
         this.brokerHost = brokerHost;
         this.services = {};
         this.messageMap = {};
@@ -194,7 +198,8 @@ class Publisher
             winston.info('Connected to broker.');
             this.connectRepeater.reset();
             this.ws.send(JSON.stringify({
-                type: "Services",
+                type: "Handshake",
+                identity: this.identity,
                 services: Object.keys(this.services).map((servicePort: string) => {
                     return {
                         localPort: this.services[parseInt(servicePort)].localPort, 
@@ -202,7 +207,7 @@ class Publisher
                         name: this.services[parseInt(servicePort)].name
                     }
                 })
-            } as ServicesMessage));
+            } as HandshakeMessage));
         })
 
         this.ws.on('message', (data, isBinary: boolean) => {

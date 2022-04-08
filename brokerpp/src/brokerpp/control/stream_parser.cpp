@@ -1,5 +1,7 @@
 #include <brokerpp/control/stream_parser.hpp>
 
+#include <iterator>
+
 namespace TunnelBore::Broker
 {
     //#####################################################################################################################
@@ -8,7 +10,7 @@ namespace TunnelBore::Broker
         const auto position = findCompleteObjectEnd();
         if (position == std::end(m_buffer))
             return std::nullopt;
-        return json::parse(consumeObject(position + 1));
+        return {json::parse(consumeObject(std::next(position)))};
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::string::const_iterator StreamParser::findCompleteObjectEnd()

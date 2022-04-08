@@ -1,6 +1,8 @@
 add_library(broker-lib STATIC
   brokerpp/session.cpp
   brokerpp/controller.cpp
+  brokerpp/config.cpp
+  brokerpp/load_home_file.cpp
   brokerpp/control/control_session.cpp
   brokerpp/control/subscription.cpp
   brokerpp/control/dispatcher.cpp
@@ -20,6 +22,7 @@ target_link_libraries(
   PRIVATE
     project-settings
     project-warnings
+    special_paths
   PUBLIC
     attender
     spdlog
