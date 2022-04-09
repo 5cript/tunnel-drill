@@ -7,3 +7,6 @@
 [submodule "special-paths"]
 	path = special-paths
 	url = git@github.com:5cript/special-paths.git
+[submodule "jwt-cpp"]
+	path = jwt-cpp
+	url = git@github.com:5cript/jwt-cpp.git
