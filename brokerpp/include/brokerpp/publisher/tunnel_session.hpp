@@ -14,7 +14,7 @@ namespace TunnelBore::Broker
     class TunnelSession : public std::enable_shared_from_this<TunnelSession>
     {
     public:
-        constexpr static std::chrono::seconds InactivityTimeout{10};
+        constexpr static std::chrono::seconds InactivityTimeout{30};
 
         TunnelSession(
             boost::asio::ip::tcp::socket&& socket, 

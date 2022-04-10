@@ -227,7 +227,6 @@ namespace TunnelBore::Broker
             std::shared_ptr <std::string> buffer
         )
         {
-            self->resetTimer();
             self->impl_->socket.async_read_some(
                 boost::asio::buffer(*buffer),
                 [
@@ -245,6 +244,8 @@ namespace TunnelBore::Broker
                         return;                   
                     }
 
+                    self->resetTimer();
+                    otherSelf->resetTimer();
                     boost::asio::async_write(
                         otherSelf->impl_->socket,
                         boost::asio::buffer(*buffer, bytesTransferred),
@@ -258,6 +259,8 @@ namespace TunnelBore::Broker
                                 return;
                             }
 
+                            self->resetTimer();
+                            otherSelf->resetTimer();
                             (*doPipe)(std::move(self), std::move(otherSelf), std::move(buffer));
                         }
                     );
