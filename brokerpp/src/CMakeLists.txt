@@ -1,14 +1,15 @@
 add_library(broker-lib STATIC
-  brokerpp/session.cpp
   brokerpp/controller.cpp
   brokerpp/config.cpp
   brokerpp/load_home_file.cpp
+  brokerpp/user_control.cpp
   brokerpp/control/control_session.cpp
   brokerpp/control/subscription.cpp
   brokerpp/control/dispatcher.cpp
   brokerpp/control/stream_parser.cpp
   brokerpp/publisher/publisher.cpp
   brokerpp/publisher/service.cpp
+  brokerpp/publisher/tunnel_session.cpp
 )
 
 target_include_directories(
@@ -26,6 +27,7 @@ target_link_libraries(
   PUBLIC
     attender
     spdlog
+    jwt-cpp::jwt-cpp
 )
 
 add_executable(broker 
@@ -39,6 +41,15 @@ target_link_libraries(
     project-warnings
     broker-lib
 )
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if (MSYS2_CLANG)
+    add_custom_command(TARGET broker POST_BUILD
+      COMMAND bash -c "cp /mingw64/bin/libatomic-1.dll ${CMAKE_BINARY_DIR}/bin/libatomic-1.dll"
+      VERBATIM
+    )
+  endif()
+endif()
 
 message("${CMAKE_SOURCE_DIR}/brokerpp/include")
 

@@ -2,8 +2,8 @@ interface ServiceInfo
 {
     name?: string;
     socketType: string;
-    localPort: number;
-    remotePort: number;
+    hiddenPort: number;
+    publicPort: number;
 }
 
 export {

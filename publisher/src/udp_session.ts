@@ -7,15 +7,15 @@ class UdpSession
     socketType: dgram.SocketType;
     onAnyClose: () => void
     anyCloseWasCalled: boolean;
-    remotePort: number;
-    localPort: number;
+    publicPort: number;
+    hiddenPort: number;
     brokerHost: string;
     onBound: (port: number) => void;
 
-    constructor({remotePort, localPort, brokerHost, token, socketType, onAnyClose, onBound}: 
+    constructor({publicPort, hiddenPort, brokerHost, token, socketType, onAnyClose, onBound}: 
         {
-            remotePort: number, 
-            localPort: number, 
+            publicPort: number, 
+            hiddenPort: number, 
             brokerHost: string, 
             token: string, 
             socketType: string, 
@@ -24,8 +24,8 @@ class UdpSession
         }
     ) 
     {
-        this.remotePort = remotePort;
-        this.localPort = localPort;
+        this.publicPort = publicPort;
+        this.hiddenPort = hiddenPort;
         this.brokerHost = brokerHost;
         this.onBound = onBound;
 
@@ -83,9 +83,9 @@ class UdpSession
                 }
                 // broker host sent this:
                 if (compareAddressStrings(addr, this.brokerHost))
-                    this.forwardingSocket.send(msg, this.localPort, "localhost");
+                    this.forwardingSocket.send(msg, this.hiddenPort, "localhost");
                 else
-                    this.forwardingSocket.send(msg, this.remotePort, this.brokerHost);
+                    this.forwardingSocket.send(msg, this.publicPort, this.brokerHost);
             })      
         })
         this.forwardingSocket.bind();

@@ -1,11 +1,13 @@
 #include <brokerpp/publisher/publisher.hpp>
 #include <brokerpp/publisher/service.hpp>
 #include <brokerpp/json.hpp>
+#include <brokerpp/resolve.hpp>
+#include <attender/session/uuid_session_cookie_generator.hpp>
+
+#include <spdlog/spdlog.h>
 
 #include <string>
-
-// FIXME: move out.
-constexpr bool preferIpv4 = false;
+#include <mutex>
 
 using namespace std::literals;
 
@@ -15,103 +17,143 @@ namespace TunnelBore::Broker
     struct Publisher::Implementation
     {
         boost::asio::io_context* context;
+        attender::uuid_generator uuidGenerator;
         std::string identity;
-        std::vector <std::unique_ptr<Service>> services;
+        std::recursive_mutex serviceGuard;
+        std::unordered_map<std::string, std::shared_ptr<Service>> services;
+        std::weak_ptr<ControlSession> controlSession;
 
-        Implementation(boost::asio::io_context* context)
+        Implementation(boost::asio::io_context* context, std::string identity)
             : context{context}
-            , identity{}
+            , uuidGenerator{}
+            , identity{std::move(identity)}
             , services{}
+            , controlSession{}
         {
         }
     };
 //#####################################################################################################################
-    Publisher::Publisher(boost::asio::io_context* context)
-        : impl_{std::make_unique<Implementation>(context)}
+    Publisher::Publisher(boost::asio::io_context* context, std::string identity)
+        : impl_{std::make_unique<Implementation>(context, std::move(identity))}
     {
     }
 //---------------------------------------------------------------------------------------------------------------------
-    void Publisher::subscribe(std::weak_ptr<ControlSession> controlSession)
+    Publisher::~Publisher()
+    {
+        spdlog::info("Publisher '{}' was destroyed", impl_->identity);
+    }
+//---------------------------------------------------------------------------------------------------------------------
+    Publisher::Publisher(Publisher&&) = default;
+//---------------------------------------------------------------------------------------------------------------------
+    Publisher& Publisher::operator=(Publisher&&) = default;
+//---------------------------------------------------------------------------------------------------------------------
+    std::weak_ptr<ControlSession> Publisher::getCurrentControlSession()
+    {
+        return impl_->controlSession;
+    }
+//---------------------------------------------------------------------------------------------------------------------
+    void Publisher::setCurrentControlSession(std::weak_ptr<ControlSession> controlSession)
     {
         auto session = controlSession.lock();
         if (!session)
             return;
 
-        session->subscribe("Handshake", [weak = weak_from_this(), controlSession](json const& j, std::string const& ref) {
+        impl_->controlSession = controlSession;
+
+        // Note to myself: dont capture session here, or it would be indefinitely kept alive.
+        session->subscribe("Handshake", [weak = weak_from_this(), controlSession](json const& j, std::string const& ref) 
+        {
+            spdlog::info("Publisher handshake received.");
+
             auto shared = weak.lock();
             if (!shared)
+            {
+                spdlog::info("Publisher is not alive anymore. Discarding handshake.");
                 return true;
+            }
             auto session = controlSession.lock();
             if (!session)
+            {
+                spdlog::info("Control session is not alive anymore. Discarding handshake.");
                 return true;
+            }
 
-            if (!j.contains("identity"))
-                return session->respondWithError(ref, "Identity missing on handshake."), false;
             if (!j.contains("services"))
+            {
+                spdlog::error("Handshake should contain services.");
                 return session->respondWithError(ref, "Services missing on handshake."), false;
+            }
 
-            shared->impl_->identity = j["identity"].get<std::string>();
-
-            std::vector <ServiceInfo> services;
             try 
             {
-                const auto jsonServices = j["services"];
-                for (json::const_iterator it = jsonServices.begin(); it != jsonServices.end(); ++it)
-                {
-                    ServiceInfo info;
-                    if (it->contains("name"))
-                        info.name = (*it)["name"].get<std::string>();
-
-                    info.publicPort = (*it)["publicPort"].get<unsigned short>();
-                    info.hiddenPort = (*it)["hiddenPort"].get<unsigned short>();
-                    services.push_back(std::move(info));
-                }
-
-                shared->setServices(services, &*session);
+                auto services = j["services"].get<std::vector<ServiceInfo>>();
+                shared->addServices(services);
             } 
             catch(std::exception const& exc) 
             {
+                spdlog::error("Exception during handshake parsing: {}", exc.what());
                 return session->respondWithError(ref, "Exception during handshake parsing: "s + exc.what()), false;
             }
             return true;
         });
     }
 //---------------------------------------------------------------------------------------------------------------------
-    void Publisher::setServices(std::vector<ServiceInfo> const& services, ControlSession* controlSession)
+    bool Publisher::addService(ServiceInfo serviceInfo)
     {
-        clearServices();
-
-        auto resolve = [this](unsigned short port) {        
-            boost::asio::ip::tcp::resolver resolver{*impl_->context};
-            typename boost::asio::ip::tcp::resolver::iterator end, start = resolver.resolve("::", std::to_string(port));
-
-            if (end == start)
-                throw std::runtime_error("Cannot resolve hostname to bind tcp servers.");
-
-            std::vector<typename boost::asio::ip::tcp::resolver::endpoint_type> endpoints{start, end};
-            std::partition(std::begin(endpoints), std::end(endpoints), [](auto const& lhs) {
-                return lhs.address().is_v4() == preferIpv4;
-            });
-            return endpoints[0];
+        auto returnResult = [this](bool result) 
+        {          
+            if (auto controlSession = impl_->controlSession.lock(); controlSession)  
+                controlSession->writeJson(json{
+                    {"type", "ServiceStartResult"},
+                    {"result", result}
+                });
+            return result;
         };
 
-        for (auto const& serviceInfo : services)
+        std::scoped_lock lock{impl_->serviceGuard};
+        for (auto const& [serviceId, service] : impl_->services)
         {
-            auto service = std::make_unique<Service>(*impl_->context, serviceInfo, resolve(serviceInfo.publicPort));
-            impl_->services.push_back(std::move(service));
-        }
-        for (auto const& service : impl_->services)
-        {
-            auto result = service->start();
-            if (!result)
+            if (serviceInfo.publicPort == service->info().publicPort)
             {
-                clearServices();
-                // FIXME: use result to improve reporting:
-                if (controlSession)
-                    controlSession->respondWithError("", "Could not start service");
-                return;
+                spdlog::info("Service for '{}' with public port '{}' already exists.", impl_->identity, serviceInfo.publicPort);
+                return returnResult(true);
             }
         }
+
+        const auto serviceId = impl_->uuidGenerator.generate_id();
+        auto service = std::make_shared<Service>(
+            *impl_->context, 
+            serviceInfo, 
+            resolveServer(*impl_->context, serviceInfo.publicPort, false),
+            weak_from_this(),
+            serviceId
+        );
+        auto result = service->start();
+        if (!result)
+        {
+            spdlog::error("Could not start service for '{}' with public port '{}'", impl_->identity, serviceInfo.publicPort);
+            return returnResult(false);
+        }
+        spdlog::info("Added service for '{}' with public port '{}'.", impl_->identity, serviceInfo.publicPort);
+        impl_->services[serviceId] = std::move(service);
+        return returnResult(true);
+    }
+//---------------------------------------------------------------------------------------------------------------------
+    void Publisher::addServices(std::vector<ServiceInfo> const& services)
+    {
+        std::scoped_lock lock{impl_->serviceGuard};
+        for (auto const& serviceInfo : services)
+            addService(serviceInfo);
+    }
+//---------------------------------------------------------------------------------------------------------------------
+    std::shared_ptr<Service> Publisher::getService(std::string const& id)
+    {
+        std::scoped_lock lock{impl_->serviceGuard};
+        auto iter = impl_->services.find(id);
+        if (iter == impl_->services.end())
+            return {};
+        else
+            return iter->second;
     }
 //---------------------------------------------------------------------------------------------------------------------
     void Publisher::clearServices()

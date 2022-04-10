@@ -2,7 +2,10 @@
 #include <boost/asio/ip/tcp.hpp>
 
 #include <brokerpp/publisher/service.hpp>
-#include <brokerpp/session.hpp>
+#include <brokerpp/publisher/publisher.hpp>
+#include <brokerpp/publisher/tunnel_session.hpp>
+#include <attender/session/uuid_session_cookie_generator.hpp>
+#include <spdlog/spdlog.h>
 
 #include <mutex>
 #include <shared_mutex>
@@ -14,37 +17,81 @@ namespace TunnelBore::Broker
 //#####################################################################################################################
 struct Service::Implementation
 {
-  boost::asio::ip::tcp::acceptor acceptor;
-  std::shared_mutex acceptorStopGuard;
-  std::vector<std::shared_ptr<Session>> sessions;
-  ServiceInfo info;
-  boost::asio::ip::tcp::endpoint bindEndpoint;
+    boost::asio::ip::tcp::acceptor acceptor;
+    std::shared_mutex acceptorStopGuard;
+    std::unordered_map<std::string, std::shared_ptr<TunnelSession>> sessions;
+    ServiceInfo info;
+    boost::asio::ip::tcp::endpoint bindEndpoint;
+    std::weak_ptr<Publisher> publisher;
+    attender::uuid_generator uuidGenerator;
+    std::mutex sessionGuard;
+    std::string serviceId;
 
-  Implementation(
-      boost::asio::io_context& context, 
-      ServiceInfo const& info,
-      boost::asio::ip::tcp::endpoint bindEndpoint
+    Implementation(
+        boost::asio::io_context& context, 
+        ServiceInfo const& info,
+        boost::asio::ip::tcp::endpoint bindEndpoint,
+        std::weak_ptr<Publisher> publisher,
+        std::string serviceId
     )
-    : acceptor{context}
-    , acceptorStopGuard{}
-    , sessions{}
-    , info{info}
-    , bindEndpoint{bindEndpoint}
-  {}
+        : acceptor{context}
+        , acceptorStopGuard{}
+        , sessions{}
+        , info{info}
+        , bindEndpoint{bindEndpoint}
+        , publisher{std::move(publisher)}
+        , uuidGenerator{}
+        , sessionGuard{}
+        , serviceId{std::move(serviceId)}
+    {}
 };
 //#####################################################################################################################
 Service::Service(
     boost::asio::io_context& context, 
     ServiceInfo const& info, 
-    boost::asio::ip::basic_endpoint<boost::asio::ip::tcp> const& bindEndpoint
+    boost::asio::ip::basic_endpoint<boost::asio::ip::tcp> const& bindEndpoint,
+    std::weak_ptr<Publisher> publisher,
+    std::string serviceId
 )
-  : impl_{std::make_unique<Implementation>(context, info, bindEndpoint)}
+    : impl_{std::make_unique<Implementation>(context, info, bindEndpoint, std::move(publisher), std::move(serviceId))}
 {
 }
 //---------------------------------------------------------------------------------------------------------------------
 Service::~Service()
 {
-  stop();
+    stop();
+}
+//---------------------------------------------------------------------------------------------------------------------
+ServiceInfo Service::info() const
+{
+    return impl_->info;
+}
+//---------------------------------------------------------------------------------------------------------------------
+std::string Service::serviceId() const
+{
+    return impl_->serviceId;
+}
+//---------------------------------------------------------------------------------------------------------------------
+void Service::connectTunnels(std::string const& idForClientTunnel, std::string const& idForPublisherTunnel)
+{
+    std::lock_guard<std::mutex> lock{impl_->sessionGuard};
+    auto clientTunnel = impl_->sessions.find(idForClientTunnel);
+    auto publisherTunnel = impl_->sessions.find(idForPublisherTunnel);
+
+    if (clientTunnel == std::end(impl_->sessions))
+    {
+        spdlog::error("Tunnel link up failed, because the client tunnnel side is gone.");
+        closeTunnelSide(idForPublisherTunnel);
+        return;
+    }
+    if (publisherTunnel == std::end(impl_->sessions))
+    {
+        spdlog::error("Tunnel link up failed, because the publisher tunnel side is gone.");
+        closeTunnelSide(idForClientTunnel);
+        return;
+    }
+
+    clientTunnel->second->link(*publisherTunnel->second);
 }
 //---------------------------------------------------------------------------------------------------------------------
 Service::Service(Service&&) = default;
@@ -76,32 +123,62 @@ boost::leaf::result<void> Service::start()
     return {};
 }
 //---------------------------------------------------------------------------------------------------------------------
+void Service::closeTunnelSide(std::string const& id)
+{
+    std::lock_guard<std::mutex> lock{impl_->sessionGuard};
+    impl_->sessions.erase(id);
+}
+//---------------------------------------------------------------------------------------------------------------------
 void Service::acceptOnce()
 {
-  std::shared_ptr<boost::asio::ip::tcp::socket> socket =
-    std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
-  impl_->acceptor.async_accept(
-    *socket,
-    [self = shared_from_this(), socket](boost::system::error_code ec) mutable {
-      std::shared_lock lock{self->impl_->acceptorStopGuard};
+    std::shared_ptr<boost::asio::ip::tcp::socket> socket =
+        std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
+    
+    impl_->acceptor.async_accept
+    (
+        *socket,
+        [self = shared_from_this(), socket](boost::system::error_code ec) mutable 
+        {
+            if (ec == boost::asio::error::operation_aborted)
+                return;
+                
+            std::shared_lock lock{self->impl_->acceptorStopGuard};
 
-      if (ec == boost::asio::error::operation_aborted)
-        return;
+            if (!self->impl_->acceptor.is_open())
+                return;
 
-      if (!self->impl_->acceptor.is_open())
-        return;
+            auto publisher = self->impl_->publisher.lock();
+            if (!publisher)
+                return;
 
-      if (!ec)
-        self->impl_->sessions.push_back(std::make_shared<Session>(std::move(*socket)));
+            // cannot accept tunnels, if we cannot communicate with the publisher.
+            auto controlSession = publisher->getCurrentControlSession().lock();
+            if (!controlSession)
+                return;
 
-      self->acceptOnce();
-    });
+            if (ec)
+                return self->acceptOnce();
+
+            const auto tunnelId = self->impl_->uuidGenerator.generate_id();
+            {
+                std::scoped_lock sessionLock{self->impl_->sessionGuard};
+                self->impl_->sessions[tunnelId] = std::make_shared<TunnelSession>(
+                    std::move(*socket), 
+                    tunnelId, 
+                    controlSession,
+                    self
+                );
+            }
+
+            self->acceptOnce();
+        }
+    );
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Service::stop()
 {
-  std::unique_lock lock{impl_->acceptorStopGuard};
-  impl_->acceptor.close();
+    std::unique_lock lock{impl_->acceptorStopGuard};
+    impl_->acceptor.close();
 }
 //#####################################################################################################################
 }

@@ -9,6 +9,7 @@
 namespace TunnelBore::Broker
 {
     class Controller;
+    class Publisher;
 
     class ControlSession
         : public attender::websocket::session_base
@@ -27,12 +28,16 @@ namespace TunnelBore::Broker
         ControlSession& operator=(ControlSession&&) = delete;
         ControlSession& operator=(ControlSession const&) = delete;
 
+        std::string identity() const;
+
         void subscribe(
             std::string const& type, 
             std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback
         );
 
-        void setup();
+        void informAboutConnection(std::string const& serviceId, std::string const& tunnelId);
+
+        void setup(std::string const& identity);
 
         void on_close() override;
         void on_text(std::string_view) override;
@@ -48,6 +53,7 @@ namespace TunnelBore::Broker
     private:
         void onAfterAuthentication();
         void endSession();
+        std::shared_ptr<Publisher> getAssociatedPublisher();
 
     private:
         struct Implementation;

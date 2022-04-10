@@ -8,14 +8,27 @@
 
 namespace TunnelBore::Broker
 {
-    class Publisher : std::enable_shared_from_this <Publisher>
+    class Service;
+
+    class Publisher : public std::enable_shared_from_this <Publisher>
     {
     public:
-        Publisher(boost::asio::io_context* context);
-        void subscribe(std::weak_ptr<ControlSession> controlSession);
+        Publisher(boost::asio::io_context* context, std::string identity);
+        ~Publisher();
+        Publisher(Publisher const&) = delete;
+        Publisher(Publisher&&);
+        Publisher& operator=(Publisher const&) = delete;
+        Publisher& operator=(Publisher&&);
+
+        void setCurrentControlSession(std::weak_ptr<ControlSession> controlSession);
+        std::weak_ptr<ControlSession> getCurrentControlSession();
+
+        std::shared_ptr<Service> getService(std::string const& id);
+
+        bool addService(ServiceInfo serviceInfo);
 
     private:
-        void setServices(std::vector<ServiceInfo> const& services, ControlSession* controlSession = nullptr);
+        void addServices(std::vector<ServiceInfo> const& services);
         void clearServices();
 
     private:

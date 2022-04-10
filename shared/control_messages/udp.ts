@@ -1,10 +1,10 @@
 interface UdpRelayBoundMessage
 {
     type: 'UdpRelayBound';
-    sessionId: string;
+    tunnelId: string;
     serviceId: string;
-    localPort: number;
-    remotePort: number;
+    hiddenPort: number;
+    publicPort: number;
     socketType: string;
     relayPort: number;
 }

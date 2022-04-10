@@ -3,16 +3,23 @@
 
 namespace TunnelBore::Broker
 {
+    namespace detail
+    {        
+#ifdef NDEBUG
+        constexpr static auto inDev = false;
+#else
+        constexpr static auto inDev = true;
+#endif
+    }
 
-Config loadConfig(bool inDev)
-{
-    const auto configString = loadHomeFile(inDev ? "configDev.json" : "config.json");
-    // TODO: 
-    return Config{};
-}
-void saveConfig(Config const& config, bool inDev)
-{
-    // TODO: 
-}
+    Config loadConfig()
+    {
+        const auto configString = loadHomeFile(detail::inDev ? "configDev.json" : "config.json");
+        return json::parse(configString).get<Config>();
+    }
+    void saveConfig(Config const& config)
+    {
+        saveHomeFile(detail::inDev ? "configDev.json" : "config.json", json{config}.dump());
+    }
 
 }

@@ -16,15 +16,14 @@ const main = () => {
 
     let configPath = pathTools.join(publisherHome, 'config.json');
     if (isDev())
-        configPath = pathTools.join(publisherHome, 'configDev.json')
+        configPath = pathTools.join(publisherHome, 'configDev.json');
 
     const config = JSON.parse(
         fs.readFileSync(configPath, {encoding: 'utf-8'})
     ) as Config;
     const publisher = new Publisher(
         "wss://" + config.host + ':' + config.port + "/api/ws/publisher", 
-        config.services, 
-        config.host
+        config
     );
 
     let end = false;

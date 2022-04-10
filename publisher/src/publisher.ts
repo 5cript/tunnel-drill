@@ -1,8 +1,8 @@
 import WebSocket from "ws";
 import RetryContext from "../../util/retry";
 import { ServiceInfo } from '../../shared/service';
-import { NewSessionMessage, NewSessionFailedMessage } from "../../shared/control_messages/new_session";
-import net from 'net';
+import { NewTunnelMessage, NewTunnelFailedMessage } from "../../shared/control_messages/new_tunnel";
+import https from 'https';
 import { generateUuid } from "../../broker/src/util/id";
 import TcpSession from "./tcp_session";
 import UdpSession from "./udp_session";
@@ -10,23 +10,25 @@ import { ServicesMessage } from "../../shared/control_messages/services";
 import { UdpRelayBoundMessage } from "../../shared/control_messages/udp";
 import winston from 'winston';
 import { HandshakeMessage } from "../../shared/control_messages/handshake";
+import jwt from 'jsonwebtoken';
+import Config from "./config";
 
 class LocalService implements ServiceInfo
 {
     name?: string;
-    localPort: number;
-    remotePort: number;
+    hiddenPort: number;
+    publicPort: number;
     socketType: string;
     // TODO: improve only one is needed.
     tcpSessions: {[id: string]: TcpSession}
     udpSessions: {[id: string]: UdpSession}
 
-    constructor({remotePort, localPort, socketType, name}: 
-        {remotePort: number, localPort: number, socketType: string, name?: string}) 
+    constructor({publicPort, hiddenPort, socketType, name}: 
+        {publicPort: number, hiddenPort: number, socketType: string, name?: string}) 
     {
         this.name = name;
-        this.localPort = localPort;
-        this.remotePort = remotePort;
+        this.hiddenPort = hiddenPort;
+        this.publicPort = publicPort;
         this.socketType = socketType.toLowerCase();
         this.tcpSessions = {};
         this.udpSessions = {};
@@ -36,15 +38,15 @@ class LocalService implements ServiceInfo
         const id = generateUuid();
         if (this.socketType === 'tcp')
         {
-            this.tcpSessions[id] = new TcpSession(this.remotePort, this.localPort, brokerHost, JSON.stringify(token), () => {
+            this.tcpSessions[id] = new TcpSession(this.publicPort, this.hiddenPort, brokerHost, JSON.stringify(token), () => {
                 this.freeSession(id);
             });
         }
         else
         {
             this.udpSessions[id] = new UdpSession({
-                remotePort: this.remotePort, 
-                localPort: this.localPort, 
+                publicPort: this.publicPort, 
+                hiddenPort: this.hiddenPort, 
                 brokerHost, 
                 socketType: this.socketType, 
                 token: JSON.stringify(token), 
@@ -77,8 +79,8 @@ class LocalService implements ServiceInfo
     }
 
     freeAll = () => {
-        for (const sessionId in this.tcpSessions) {
-            this.freeSession(sessionId);
+        for (const tunnelId in this.tcpSessions) {
+            this.freeSession(tunnelId);
         }
     }
 }
@@ -87,22 +89,25 @@ class Publisher
 {
     ws: WebSocket;
     connectRepeater: RetryContext;
-    services: {[localPort: number]: LocalService};
+    services: {[hiddenPort: number]: LocalService};
     messageMap: {[messageName: string]: (...args: any) => void}
     brokerHost: string;
     shallDie: boolean;
     identity: string;
+    authToken: string;
 
-    constructor(wsPath: string, services: Array<ServiceInfo>, brokerHost: string) {
+    constructor(wsPath: string, config: Config) {
         // FIXME: something better, needs to be solved with authentication later:
         this.identity = generateUuid();
-        this.brokerHost = brokerHost;
+        this.brokerHost = config.host;
         this.services = {};
         this.messageMap = {};
-        services.forEach(service => {
-            this.services[service.localPort] = new LocalService({
-                localPort: service.localPort, 
-                remotePort: service.remotePort,
+        this.authToken = '';
+
+        config.services.forEach(service => {
+            this.services[service.hiddenPort] = new LocalService({
+                hiddenPort: service.hiddenPort, 
+                publicPort: service.publicPort,
                 socketType: service.socketType,
                 name: service.name
             });
@@ -110,12 +115,42 @@ class Publisher
         this.shallDie = false;
 
         // register understood messages:
-        this.messageMap["NewSession"] = (messageObject: NewSessionMessage) => {
-            this.onNewSession(messageObject);
+        this.messageMap["NewTunnel"] = (messageObject: NewTunnelMessage) => {
+            this.onNewTunnel(messageObject);
         }
+        this.messageMap["Error"] = (messageObject: any) => {
+            winston.error(`Error from broker: ${messageObject.message}`);
+        }
+
+        this.connectRepeater = new RetryContext(() => {this.connect(this.authToken, wsPath);}, 1000);
+
+        const req = https.request({
+            hostname: config.authorityHost,
+            port: config.authorityPort,
+            path: '/auth',
+            method: 'GET',
+            rejectUnauthorized: false,
+            headers: {
+                'Authorization': 'Basic ' + Buffer.from(config.identity + ':' + config.passHashed).toString('base64')
+            }
+        }, res => {
+            if (res.statusCode !== 200)
+            {
+                winston.error("Could not authenticate with authority.");
+                process.exit(1);
+            }
+            res.on('data', token => {
+                this.authToken = token;
+                this.connect(this.authToken, wsPath);
+            })
+        });
         
-        this.connectRepeater = new RetryContext(() => {this.connect(wsPath);}, 1000);
-        this.connect(wsPath);
+        req.on('error', error => {
+            winston.error(`Error in authentication request ${error.message}`);
+            process.exit(1);
+        })
+
+        req.end();
     }
 
     stop = () => {
@@ -127,49 +162,56 @@ class Publisher
         }
     }
 
-    private onNewSession = ({sessionId, serviceId, localPort, remotePort, socketType}: NewSessionMessage) => {
-        winston.info(`New session for ${localPort}.`);
+    private onNewTunnel = ({tunnelId, serviceId, hiddenPort, publicPort, socketType}: NewTunnelMessage) => {
+        winston.info(`New session for ${hiddenPort}.`);
 
         const replyWithFailure = (reason: string) => {
-            const reply: NewSessionFailedMessage = {
-                type: "NewSessionFailed", sessionId, serviceId, localPort, remotePort, reason, socketType
+            const reply: NewTunnelFailedMessage = {
+                type: "NewTunnelFailed", tunnelId, serviceId, hiddenPort, publicPort, reason, socketType
             }
             this.ws.send(JSON.stringify(reply));
         }
 
-        if (!this.services[localPort]) {
-            winston.error(`There is no service for that port ${localPort}`);
+        if (!this.services[hiddenPort]) {
+            winston.error(`There is no service for that port ${hiddenPort}`);
             replyWithFailure('There is no service here for that port.');
         }
 
         const onBound = (port: number) => {
             this.ws.send(JSON.stringify({
                 type: "UdpRelayBound",
-                sessionId,
+                tunnelId,
                 serviceId,
-                localPort,
-                remotePort,
+                hiddenPort,
+                publicPort,
                 socketType,
                 relayPort: port
             } as UdpRelayBoundMessage))
         }
         try {
-            this.services[localPort].createSession(this.brokerHost, {sessionId, serviceId, localPort, remotePort}, onBound);
+            this.services[hiddenPort].createSession(this.brokerHost, 
+                // sent on tcp client to broker:
+                // should not become more than 4096 bytes when serialized.
+                {identity: this.identity, tunnelId, serviceId, hiddenPort, publicPort}
+            , onBound);
         }
         catch (error) {
             replyWithFailure(error.message);
-            winston.error(`Could not create session ${sessionId}.`);
+            winston.error(`Could not create session ${tunnelId}.`);
         }
     }
 
-    private connect = (wsPath: string) => {
+    private connect = (token: string, wsPath: string) => {
         if (this.shallDie)
             return;
 
         winston.info(`Trying to connect to broker ${wsPath}`);
         try {
             this.ws = new WebSocket(wsPath, {
-                rejectUnauthorized: false
+                rejectUnauthorized: false,
+                headers: {
+                    'Authorization': 'Bearer ' + Buffer.from(token).toString('base64')
+                }
             });
         } catch (error) {
             winston.error(`Exception in control line connect ${error.message}`);
@@ -202,8 +244,8 @@ class Publisher
                 identity: this.identity,
                 services: Object.keys(this.services).map((servicePort: string) => {
                     return {
-                        localPort: this.services[parseInt(servicePort)].localPort, 
-                        remotePort: this.services[parseInt(servicePort)].remotePort,
+                        hiddenPort: this.services[parseInt(servicePort)].hiddenPort, 
+                        publicPort: this.services[parseInt(servicePort)].publicPort,
                         name: this.services[parseInt(servicePort)].name
                     }
                 })

@@ -21,7 +21,10 @@ public:
     void start(unsigned short port);
     void stop();
 
+    std::shared_ptr<Publisher> obtainPublisher(std::string const& identity);
+
 private:
+    boost::asio::io_context* context_;
     attender::websocket::server ws_;
     std::mutex guard_;
     std::unordered_map<std::string, std::shared_ptr<attender::websocket::connection>> connections_;

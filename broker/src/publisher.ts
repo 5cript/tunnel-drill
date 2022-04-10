@@ -3,7 +3,7 @@ import { ServiceInfo } from '../../shared/service';
 import { AcceptorHandle, TcpAcceptorPool } from './acceptor_pool';
 import net from 'net';
 import { generateUuid } from './util/id';
-import { NewSessionMessage, NewSessionFailedMessage } from '../../shared/control_messages/new_session';
+import { NewTunnelMessage, NewTunnelFailedMessage } from '../../shared/control_messages/new_tunnel';
 import compareAddressStrings from '../../util/ip';
 import { ServicesMessage } from '../../shared/control_messages/services';
 import SharedConstants from '../../shared/shared_constants';
@@ -52,40 +52,40 @@ class Session
 class PublishedService
 {
     name?: string;
-    localPort: number;
-    remotePort: number;
+    hiddenPort: number;
+    publicPort: number;
     acceptorHandle: AcceptorHandle;
-    sessions: {[sessionId: string]: Session};
+    sessions: {[tunnelId: string]: Session};
 
-    constructor({localPort, remotePort, name, acceptorHandle}: 
-        {localPort: number, remotePort: number, name?: string, acceptorHandle: AcceptorHandle})
+    constructor({hiddenPort, publicPort, name, acceptorHandle}: 
+        {hiddenPort: number, publicPort: number, name?: string, acceptorHandle: AcceptorHandle})
     {
-        this.localPort = localPort;
-        this.remotePort = remotePort;
+        this.hiddenPort = hiddenPort;
+        this.publicPort = publicPort;
         this.name = name;
         this.acceptorHandle = acceptorHandle;
         this.sessions = {};
     }
 
-    addSocketToHalfOpenSession = (sessionId: string, publisherSocket: net.Socket) => {
-        if (this.sessions[sessionId].isHalfOpen())
+    addSocketToHalfOpenSession = (tunnelId: string, publisherSocket: net.Socket) => {
+        if (this.sessions[tunnelId].isHalfOpen())
         {
             publisherSocket.on('error', (error) => {
-                winston.error(`Error in publisher socket for session id ${sessionId} with error ${error.message}`);
+                winston.error(`Error in publisher socket for session id ${tunnelId} with error ${error.message}`);
             })
             publisherSocket.on('close', () => {
-                this.freeSession(sessionId);
+                this.freeSession(tunnelId);
             })
-            this.sessions[sessionId].connect(publisherSocket);
+            this.sessions[tunnelId].connect(publisherSocket);
         }
     }
 
-    freeSession = (sessionId: string) => {
-        if (!this.sessions[sessionId])
+    freeSession = (tunnelId: string) => {
+        if (!this.sessions[tunnelId])
             return;
 
-        this.sessions[sessionId].free();
-        delete this.sessions[sessionId];
+        this.sessions[tunnelId].free();
+        delete this.sessions[tunnelId];
     }
 
     freeAll = () => {
@@ -119,7 +119,7 @@ class Publisher
         })
 
         // register understood messages:
-        this.messageMap["NewSessionFailed"] = (messageObject: NewSessionFailedMessage) => {
+        this.messageMap["NewTunnelFailed"] = (messageObject: NewTunnelFailedMessage) => {
             this.onSessionFailed(messageObject);
         }
         this.messageMap["Services"] = (messageObject: ServicesMessage) => {
@@ -127,23 +127,23 @@ class Publisher
         }
     }
 
-    freeSessionForService(serviceId: string, sessionId: string)
+    freeSessionForService(serviceId: string, tunnelId: string)
     {
         if (this.services[serviceId])
         {
-            this.services[serviceId].freeSession(sessionId);
-            delete this.services[serviceId].sessions[sessionId];
+            this.services[serviceId].freeSession(tunnelId);
+            delete this.services[serviceId].sessions[tunnelId];
         }
     }
 
-    onSessionFailed = ({localPort, remotePort, serviceId, sessionId, socketType, reason}: NewSessionFailedMessage) => {
+    onSessionFailed = ({hiddenPort, publicPort, serviceId, tunnelId, socketType, reason}: NewTunnelFailedMessage) => {
         if (!this.services[serviceId])
         {
             winston.error(`onSessionFailed for unknown service id ${serviceId}.`);
             return;
         }
-        winston.error(`session ${sessionId} failed for service ${serviceId}(${localPort}, ${socketType}) for reason ${reason}`);
-        this.freeSessionForService(serviceId, sessionId);
+        winston.error(`session ${tunnelId} failed for service ${serviceId}(${hiddenPort}, ${socketType}) for reason ${reason}`);
+        this.freeSessionForService(serviceId, tunnelId);
     }
 
     clearServices = () => {
@@ -159,14 +159,14 @@ class Publisher
 
         serviceInfos.forEach(service => {
             const serviceId = generateUuid();
-            const acceptorHandle = this.tcpServers.makeAcceptor(service.remotePort, (socket: net.Socket) => {
+            const acceptorHandle = this.tcpServers.makeAcceptor(service.publicPort, (socket: net.Socket) => {
                 this.onConnect(serviceId, socket);
             })
             if (!acceptorHandle)
                 return;
             this.services[serviceId] = new PublishedService({
-                remotePort: service.remotePort, 
-                localPort: service.localPort,
+                publicPort: service.publicPort, 
+                hiddenPort: service.hiddenPort,
                 name: service.name ? service.name : serviceId, 
                 acceptorHandle
             });
@@ -183,24 +183,24 @@ class Publisher
 
         const doInitialConnect = (socket: net.Socket, initialData: Buffer) => {
             winston.info(`New session for service ${this.services[serviceId].name}`);
-            const sessionId = generateUuid();
+            const tunnelId = generateUuid();
             socket.on('error', (error) => {
-                winston.error(`Error in client socket for session id ${sessionId}: ${error.message}.`);
+                winston.error(`Error in client socket for session id ${tunnelId}: ${error.message}.`);
             })
-            this.services[serviceId].sessions[sessionId] = new Session(socket, initialData);
+            this.services[serviceId].sessions[tunnelId] = new Session(socket, initialData);
             this.controlSocket.send(JSON.stringify({
-                type: 'NewSession',
+                type: 'NewTunnel',
                 serviceId: serviceId,
-                sessionId: sessionId,
-                localPort: this.services[serviceId].localPort,
-                remotePort: this.services[serviceId].remotePort 
-            } as NewSessionMessage));
+                tunnelId: tunnelId,
+                hiddenPort: this.services[serviceId].hiddenPort,
+                publicPort: this.services[serviceId].publicPort 
+            } as NewTunnelMessage));
         };
-        const doPublisherConnect = (socket: net.Socket, {sessionId, serviceId}: {sessionId: string, serviceId: string}) => {
+        const doPublisherConnect = (socket: net.Socket, {tunnelId, serviceId}: {tunnelId: string, serviceId: string}) => {
             socket.on('error', (error) => {
-                winston.error(`Error in client socket for session id ${sessionId}: ${error.message}.`);
+                winston.error(`Error in client socket for session id ${tunnelId}: ${error.message}.`);
             })
-            this.services[serviceId].addSocketToHalfOpenSession(sessionId, socket);
+            this.services[serviceId].addSocketToHalfOpenSession(tunnelId, socket);
             return;
         }
 
@@ -209,12 +209,12 @@ class Publisher
             socket.pause();
             try {
                 const token = JSON.parse(peekBuffer.toString('utf-8'));
-                if (token && token.sessionId && token.serviceId && sameAddress) 
+                if (token && token.tunnelId && token.serviceId && sameAddress) 
                 {
                     doPublisherConnect(
                         socket, 
                         {
-                            sessionId: token.sessionId,
+                            tunnelId: token.tunnelId,
                             serviceId: token.serviceId
                         }
                     );

@@ -1,44 +1,39 @@
 #include <brokerpp/control/control_session.hpp>
 #include <brokerpp/control/stream_parser.hpp>
 #include <brokerpp/control/dispatcher.hpp>
-#include <brokerpp/control/user.hpp>
 #include <brokerpp/controller.hpp>
+#include <brokerpp/publisher/service.hpp>
 
 #include <spdlog/spdlog.h>
+
+#include <iomanip>
+#include <sstream>
 
 namespace TunnelBore::Broker
 {
     //#####################################################################################################################
     struct ControlSession::Implementation
     {
+        std::string identity;
         std::string sessionId;
         bool authenticated;
-        std::weak_ptr<ControlSession> session;
         std::weak_ptr<Controller> controller;
         StreamParser textParser;
         Dispatcher dispatcher;
-        User user;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
-        
-        void imbueOwner(std::weak_ptr<ControlSession> session);
 
         Implementation(std::string sessionId, std::weak_ptr<Controller> controller);
     };
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::Implementation::Implementation(std::string sessionId, std::weak_ptr<Controller> controller)
-        : sessionId{std::move(sessionId)}
+        : identity{}
+        , sessionId{std::move(sessionId)}
         , authenticated{false}
-        , session{}
         , controller{controller}
         , textParser{}
         , dispatcher{}
     {}
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::Implementation::imbueOwner(std::weak_ptr<ControlSession> sess)
-    {
-        session = sess;
-    }
     //#####################################################################################################################
     ControlSession::ControlSession(
         attender::websocket::connection* owner,
@@ -48,6 +43,15 @@ namespace TunnelBore::Broker
         : attender::websocket::session_base{owner}
         , impl_{std::make_unique<Implementation>(sessionId, controller)}
     {
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::shared_ptr<Publisher> ControlSession::getAssociatedPublisher()
+    {
+        auto controller = impl_->controller.lock();
+        if (!controller)
+            return {};
+
+        return controller->obtainPublisher(impl_->identity);
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::subscribe(
@@ -60,9 +64,36 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::~ControlSession() = default;
     //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::setup()
+    void ControlSession::setup(std::string const& identity)
     {
-        impl_->imbueOwner(weak_from_this());
+        impl_->identity = identity;
+        auto publisher = getAssociatedPublisher();
+        publisher->setCurrentControlSession(weak_from_this());
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::string ControlSession::identity() const
+    {
+        return impl_->identity;
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::informAboutConnection(std::string const& serviceId, std::string const& tunnelId)
+    {
+        auto publisher = getAssociatedPublisher();
+        auto service = publisher->getService(serviceId);
+        if (!service)
+            return;
+
+        auto serviceInfo = service->info();
+
+        spdlog::info("Asking publisher for connection to pipe.");
+        writeJson(json{
+            {"type", "NewTunnel"},
+            {"serviceId", serviceId},
+            {"tunnelId", tunnelId},
+            {"publicPort", serviceInfo.publicPort},
+            {"hiddenPort", serviceInfo.hiddenPort},
+            {"socketType", "tcp"}
+        });
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::on_text(std::string_view txt)
@@ -96,22 +127,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onJson(json const& j, std::string const& ref)
     {
-        // TODO: Authentication:
-        //if (impl_->authenticated)
         return impl_->dispatcher.dispatch(j, ref);
-
-        // if (impl_->user.authenticate(j["payload"]))
-        // {
-        //     impl_->authenticated = true;
-        //     writeJson(
-        //         json{
-        //             {"ref", ref},
-        //             {"authenticated", true},
-        //         },
-        //         [this](auto, auto) {
-        //             onAfterAuthentication();
-        //         });
-        // }
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::endSession()
@@ -160,6 +176,7 @@ namespace TunnelBore::Broker
     {
         spdlog::info("Responding with error: '{}'.");
         writeJson(json{
+            {"type", "Error"},
             {"ref", ref},
             {"error", msg},
         });
@@ -169,9 +186,7 @@ namespace TunnelBore::Broker
         std::string const& txt,
         std::function<void(session_base*, std::size_t)> const& on_complete)
     {
-        std::stringstream sstr;
-        sstr << "0x" << std::hex << std::setw(8) << std::setfill('0') << txt.size() << "|" << txt;
-        return write_text(sstr.str(), on_complete);
+        return write_text(txt, on_complete);
     }
     //---------------------------------------------------------------------------------------------------------------------
     bool
