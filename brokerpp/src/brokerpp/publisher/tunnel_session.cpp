@@ -240,8 +240,7 @@ namespace TunnelBore::Broker
                     if (ec)
                     {
                         self->close();
-                        otherSelf->close();
-                        return;                   
+                        return;
                     }
 
                     self->resetTimer();
@@ -249,10 +248,10 @@ namespace TunnelBore::Broker
                     boost::asio::async_write(
                         otherSelf->impl_->socket,
                         boost::asio::buffer(*buffer, bytesTransferred),
-                        [self = std::move(self), otherSelf = std::move(otherSelf), buffer = std::move(buffer), doPipe = std::move(doPipe)]
+                        [self = std::move(self), otherSelf = std::move(otherSelf), buffer = std::move(buffer), doPipe = std::move(doPipe), close = ec.operator bool()]
                         (auto const& ec, std::size_t)
                         {
-                            if  (ec)
+                            if  (ec || close)
                             {
                                 self->close();
                                 otherSelf->close();
@@ -268,6 +267,23 @@ namespace TunnelBore::Broker
             );
         };
         (*doPipe)(shared_from_this(), other.shared_from_this(), std::make_shared<std::string>(4096, '\0'));
+    }
+//---------------------------------------------------------------------------------------------------------------------
+    void TunnelSession::delayedClose()
+    {
+        auto delayTimer = std::make_shared<boost::asio::deadline_timer>(impl_->socket.get_executor());
+        delayTimer->expires_from_now(boost::posix_time::seconds{1});
+        impl_->inactivityTimer.async_wait([weak = weak_from_this(), delayTimer](auto const& ec) 
+        {
+            if (ec == boost::asio::error::operation_aborted)
+                return;            
+
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            self->close();
+        });
     }
 //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::close()

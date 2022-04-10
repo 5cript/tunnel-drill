@@ -29,6 +29,7 @@ namespace TunnelBore::Broker
         TunnelSession& operator=(TunnelSession&&);
 
         void close();
+        void delayedClose();
         void link(TunnelSession& other);
         void peek();
         void pipeTo(TunnelSession& other);

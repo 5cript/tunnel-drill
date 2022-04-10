@@ -33,13 +33,13 @@ export CC=$CCOMPILER
 CMAKE_GENERATOR="Unix Makefiles"
 if [[ ! -z "${MSYSTEM}" ]]; then
   CMAKE_GENERATOR="MSYS Makefiles"
-  if [[ $COMPILER == clang ]]; then
+  if [[ $CCOMPILER == clang ]]; then
     IS_MSYS2_CLANG=on
   fi
 fi
 
 CMAKE_CXX_FLAGS=""
-if [[ $COMPILER == clang ]]; then
+if [[ $CCOMPILER == clang ]]; then
   CMAKE_CXX_FLAGS="-fuse-ld=lld"
 fi
 
