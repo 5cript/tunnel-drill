@@ -43,10 +43,12 @@ class TcpSession
         })
         this.localSocket.on('close', () => {
             // FIXME: improveMe
-            this.remoteSocket?.end();
-            this.remoteSocket?.destroy();
-            this.remoteSocket?.unref();
-            this.onAnyClose();
+            setTimeout(() => {
+                this.remoteSocket?.end();
+                this.remoteSocket?.destroy();
+                this.remoteSocket?.unref();
+                this.onAnyClose();
+            }, 1000) // 1 sec to write stuff.
         })
         this.localSocket.on('connect', () => {
             winston.info(`Both ends are open, starting to pipe between broker at ${this.remotePort} and service at ${this.hiddenPort}`);
@@ -78,7 +80,7 @@ class TcpSession
                 this.localSocket?.destroy();
                 this.localSocket?.unref();
                 this.onAnyClose();
-            }, 500)
+            }, 1000)
         });
         this.remoteSocket.on('connect', () => {
             this.remoteSocket.write(token, 'utf-8', () => {
