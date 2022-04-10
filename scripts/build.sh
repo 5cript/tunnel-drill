@@ -39,8 +39,10 @@ if [[ ! -z "${MSYSTEM}" ]]; then
 fi
 
 CMAKE_CXX_FLAGS=""
-if [[ $CCOMPILER == clang ]]; then
-  CMAKE_CXX_FLAGS="-fuse-ld=lld"
+if [[ ! -z "${MSYSTEM}" ]]; then
+  if [[ $CCOMPILER == clang ]]; then
+    CMAKE_CXX_FLAGS="-fuse-ld=lld"
+  fi
 fi
 
 cmake \
