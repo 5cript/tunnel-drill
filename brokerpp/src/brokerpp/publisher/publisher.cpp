@@ -115,6 +115,7 @@ namespace TunnelBore::Broker
         {
             if (serviceInfo.publicPort == service->info().publicPort)
             {
+                // TODO: This does not change service config changes. How to handle this?
                 spdlog::info("Service for '{}' with public port '{}' already exists.", impl_->identity, serviceInfo.publicPort);
                 return returnResult(true);
             }

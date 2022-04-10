@@ -4,6 +4,7 @@ interface ServiceInfo
     socketType: string;
     hiddenPort: number;
     publicPort: number;
+    hiddenHost?: string;
 }
 
 export {

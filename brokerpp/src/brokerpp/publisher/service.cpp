@@ -162,12 +162,14 @@ void Service::acceptOnce()
             const auto tunnelId = self->impl_->uuidGenerator.generate_id();
             {
                 std::scoped_lock sessionLock{self->impl_->sessionGuard};
-                self->impl_->sessions[tunnelId] = std::make_shared<TunnelSession>(
+                auto tunnelSide = std::make_shared<TunnelSession>(
                     std::move(*socket), 
                     tunnelId, 
                     controlSession,
                     self
                 );
+                tunnelSide->peek();
+                self->impl_->sessions[tunnelId] = std::move(tunnelSide);
             }
 
             self->acceptOnce();

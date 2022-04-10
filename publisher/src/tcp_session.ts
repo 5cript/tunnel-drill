@@ -10,14 +10,16 @@ class TcpSession
     localSocket: net.Socket;
     anyCloseWasCalled: boolean;
     hiddenPort: number;
+    hiddenHost: string;
     remotePort: number;
     onAnyClose: () => void;
 
-    constructor(publicPort: number, hiddenPort: number, brokerHost: string, token: string, onAnyClose: () => void) 
+    constructor(publicPort: number, hiddenPort: number, brokerHost: string, token: string, onAnyClose: () => void, hiddenHost?: string) 
     {
         this.anyCloseWasCalled = false;
         this.hiddenPort = hiddenPort;
         this.remotePort = publicPort;
+        this.hiddenHost = hiddenHost ? hiddenHost : "localhost";
 
         this.onAnyClose = () => {
             if (!this.anyCloseWasCalled)
@@ -30,10 +32,10 @@ class TcpSession
         this.connectRemoteSocket(brokerHost, publicPort, token);
     }
 
-    private connectLocalSocket = (initialData: Buffer) => {
+    private connectLocalSocket = () => {
         this.localSocket = new net.Socket({});
         this.localSocket.connect({
-            host: 'localhost',
+            host: this.hiddenHost,
             port: this.hiddenPort
         });
         this.localSocket.on('error', (error) => {
@@ -41,19 +43,22 @@ class TcpSession
         })
         this.localSocket.on('close', () => {
             // FIXME: improveMe
-            setTimeout(() => {
-                this.remoteSocket.destroy();
-                this.remoteSocket.unref();
-                this.onAnyClose();
-            }, 5000); // 5 seconds to end all IO
+            this.remoteSocket?.end();
+            this.remoteSocket?.destroy();
+            this.remoteSocket?.unref();
+            this.onAnyClose();
         })
         this.localSocket.on('connect', () => {
             winston.info(`Both ends are open, starting to pipe between broker at ${this.remotePort} and service at ${this.hiddenPort}`);
-            this.localSocket.write(initialData, undefined, () => {
-                this.remoteSocket.pipe(this.localSocket);
-                this.localSocket.pipe(this.remoteSocket);
-                this.remoteSocket.resume();
-            })
+            // this.localSocket.on('data', (data) => {
+            //     this.remoteSocket.write(data);
+            // })
+            // this.remoteSocket.on('data', (data) => {
+            //     this.localSocket.write(data);
+            // })
+            this.localSocket.pipe(this.remoteSocket);
+            this.remoteSocket.pipe(this.localSocket);
+            this.remoteSocket.resume();
         })
     }
 
@@ -63,37 +68,32 @@ class TcpSession
             host: brokerHost,
             port: publicPort
         });
+        this.remoteSocket.pause();
         this.remoteSocket.on('error', (error) => {
             winston.error(`Error with remote socket for service with local port ${this.hiddenPort}: ${error.message}`);
         })
         this.remoteSocket.on('close', () => {
-            // FIXME: improveMe
             setTimeout(() => {
-                this.localSocket.destroy();
-                this.localSocket.unref();
+                this.localSocket?.end();
+                this.localSocket?.destroy();
+                this.localSocket?.unref();
                 this.onAnyClose();
-            }, 5000) // 5 seconds to end all IO
-        })
-
+            }, 500)
+        });
         this.remoteSocket.on('connect', () => {
             this.remoteSocket.write(token, 'utf-8', () => {
+                this.connectLocalSocket();
             });
-            this.remoteSocket.once('data', (buffer) => {
-                this.remoteSocket.pause();
-                let initialBuf = Buffer.alloc(buffer.length);
-                buffer.copy(initialBuf);
-                this.connectLocalSocket(initialBuf);
-            })
-        })
+        });
     }
 
     free = () => {
-        this.remoteSocket.end();
-        this.remoteSocket.destroy();
-        this.remoteSocket.unref();
-        this.localSocket.end();
-        this.localSocket.destroy();
-        this.localSocket.unref();
+        this.remoteSocket?.end();
+        this.remoteSocket?.destroy();
+        this.remoteSocket?.unref();
+        this.localSocket?.end();
+        this.localSocket?.destroy();
+        this.localSocket?.unref();
     }
 }
 

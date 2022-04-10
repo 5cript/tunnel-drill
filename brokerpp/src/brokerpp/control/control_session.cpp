@@ -20,6 +20,7 @@ namespace TunnelBore::Broker
         std::weak_ptr<Controller> controller;
         StreamParser textParser;
         Dispatcher dispatcher;
+        boost::asio::ip::tcp::endpoint remoteEndpoint;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
 
@@ -33,6 +34,7 @@ namespace TunnelBore::Broker
         , controller{controller}
         , textParser{}
         , dispatcher{}
+        , remoteEndpoint{}
     {}
     //#####################################################################################################################
     ControlSession::ControlSession(
@@ -43,6 +45,15 @@ namespace TunnelBore::Broker
         : attender::websocket::session_base{owner}
         , impl_{std::make_unique<Implementation>(sessionId, controller)}
     {
+        owner->with_stream_do([this](auto& stream)
+        {
+            impl_->remoteEndpoint = boost::beast::get_lowest_layer(stream).socket().remote_endpoint();
+        });
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    boost::asio::ip::tcp::endpoint ControlSession::remoteEndpoint() const
+    {
+        return impl_->remoteEndpoint;
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::shared_ptr<Publisher> ControlSession::getAssociatedPublisher()

@@ -4,6 +4,8 @@
 #include <brokerpp/control/subscription.hpp>
 
 #include <attender/websocket/server/flexible_session.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
 #include <memory>
 
 namespace TunnelBore::Broker
@@ -29,6 +31,7 @@ namespace TunnelBore::Broker
         ControlSession& operator=(ControlSession const&) = delete;
 
         std::string identity() const;
+        boost::asio::ip::tcp::endpoint remoteEndpoint() const;
 
         void subscribe(
             std::string const& type, 

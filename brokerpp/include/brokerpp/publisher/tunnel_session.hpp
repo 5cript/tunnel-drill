@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <chrono>
 
 namespace TunnelBore::Broker
 {
@@ -13,6 +14,8 @@ namespace TunnelBore::Broker
     class TunnelSession : public std::enable_shared_from_this<TunnelSession>
     {
     public:
+        constexpr static std::chrono::seconds InactivityTimeout{10};
+
         TunnelSession(
             boost::asio::ip::tcp::socket&& socket, 
             std::string tunnelId, 
@@ -27,9 +30,10 @@ namespace TunnelBore::Broker
 
         void close();
         void link(TunnelSession& other);
-
-    private:
         void peek();
+        void pipeTo(TunnelSession& other);
+
+        void resetTimer();
 
     private:
         struct Implementation;

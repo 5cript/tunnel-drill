@@ -19,14 +19,16 @@ class LocalService implements ServiceInfo
     hiddenPort: number;
     publicPort: number;
     socketType: string;
+    hiddenHost?: string;
     // TODO: improve only one is needed.
     tcpSessions: {[id: string]: TcpSession}
     udpSessions: {[id: string]: UdpSession}
 
-    constructor({publicPort, hiddenPort, socketType, name}: 
-        {publicPort: number, hiddenPort: number, socketType: string, name?: string}) 
+    constructor({publicPort, hiddenPort, socketType, name, hiddenHost}: 
+        {publicPort: number, hiddenPort: number, socketType: string, name?: string, hiddenHost?: string}) 
     {
         this.name = name;
+        this.hiddenHost = hiddenHost;
         this.hiddenPort = hiddenPort;
         this.publicPort = publicPort;
         this.socketType = socketType.toLowerCase();
@@ -40,7 +42,7 @@ class LocalService implements ServiceInfo
         {
             this.tcpSessions[id] = new TcpSession(this.publicPort, this.hiddenPort, brokerHost, JSON.stringify(token), () => {
                 this.freeSession(id);
-            });
+            }, this.hiddenHost);
         }
         else
         {
@@ -109,7 +111,8 @@ class Publisher
                 hiddenPort: service.hiddenPort, 
                 publicPort: service.publicPort,
                 socketType: service.socketType,
-                name: service.name
+                name: service.name,
+                hiddenHost: service.hiddenHost,
             });
         })
         this.shallDie = false;
