@@ -1,11 +1,22 @@
 #!/bin/bash -e
 
+# Arguments:
+#   -b Debug/Release debug or release build, debug if not passed
+#   -j Threads to build with, 1 if not passed.
+
 IS_MSYS2_CLANG=off
 COMPILER=clang++
 CCOMPILER=clang
 LINKER=lld
 THREADS=1
 BUILD_TYPE=Debug
+
+while getopts b:j: opts; do
+   case ${opts} in
+      b) BUILD_TYPE=${OPTARG} ;;
+      j) THREADS=${OPTARG} ;;
+   esac
+done
 
 # Go to build dir
 CURDIR=$(basename $PWD)
