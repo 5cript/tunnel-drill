@@ -28,8 +28,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "HTTPS=true PUBLIC_URL=/frontend BUILD_PATH='../dist/app' craco start",
-    "build": "PUBLIC_URL=/frontend BUILD_PATH='../dist/app' craco build",
+    "start": "cross-env HTTPS=true PUBLIC_URL=/frontend BUILD_PATH='../dist/app' craco start",
+    "build": "cross-env PUBLIC_URL=/frontend BUILD_PATH='../dist/app' craco build",
     "test": "craco test",
     "eject": "craco eject"
   },

@@ -7,15 +7,12 @@
   "scripts": {
     "build-dev": "webpack --config webpack.dev.js",
     "build": "webpack --config webpack.prod.js",
-    "run": "cd dist && cross-env DEV_BUILD=1 node --inspect ./broker.cjs",
-    "run:prod": "cd prod && node ./broker.cjs",
     "front": "cd ./page && npm run build",
-    "dev": "npm-run-all build-dev run",
+    "broker": "bash ./scripts/build.sh && cd ./build/clang_debug/bin && broker.exe",
     "run:publisher": "cd prod && node ./publisher.cjs",
     "dev:publisher": "cd dist && cross-env DEV_BUILD=1 node ./publisher.cjs",
     "publisher": "npm-run-all build run:publisher",
-    "devpub": "npm-run-all build-dev dev:publisher",
-    "broker": "npm-run-all build run:prod"
+    "devpub": "npm-run-all build-dev dev:publisher"
   },
   "repository": {
     "type": "git",
