@@ -13,15 +13,14 @@ namespace TunnelBore::Broker
 
     class TunnelSession : public std::enable_shared_from_this<TunnelSession>
     {
-    public:
+      public:
         constexpr static std::chrono::seconds InactivityTimeout{30};
 
         TunnelSession(
-            boost::asio::ip::tcp::socket&& socket, 
-            std::string tunnelId, 
+            boost::asio::ip::tcp::socket&& socket,
+            std::string tunnelId,
             std::weak_ptr<ControlSession> controlSession,
-            std::weak_ptr<Service> service
-        );
+            std::weak_ptr<Service> service);
         ~TunnelSession();
         TunnelSession(TunnelSession const&) = delete;
         TunnelSession(TunnelSession&&);
@@ -36,8 +35,8 @@ namespace TunnelBore::Broker
 
         void resetTimer();
 
-    private:
+      private:
         struct Implementation;
-        std::unique_ptr <Implementation> impl_;
+        std::unique_ptr<Implementation> impl_;
     };
 }

@@ -1,79 +1,75 @@
+#include <brokerpp/winsock_first.hpp>
 #include <brokerpp/control/control_session.hpp>
-#include <brokerpp/control/stream_parser.hpp>
 #include <brokerpp/control/dispatcher.hpp>
-#include <brokerpp/controller.hpp>
+#include <brokerpp/request_listener/page_control_provider.hpp>
 #include <brokerpp/publisher/service.hpp>
+#include <brokerpp/control/stream_parser.hpp>
+#include <brokerpp/publisher/publisher.hpp>
 
 #include <spdlog/spdlog.h>
 
-#include <iomanip>
-#include <sstream>
+#include <string>
 
 namespace TunnelBore::Broker
 {
     //#####################################################################################################################
     struct ControlSession::Implementation
     {
-        std::string identity;
         std::string sessionId;
+        std::weak_ptr<PageAndControlProvider> page_and_control;
+        std::shared_ptr<Roar::WebsocketSession> ws;
+        std::string identity;
         bool authenticated;
-        std::weak_ptr<Controller> controller;
         StreamParser textParser;
         Dispatcher dispatcher;
         boost::asio::ip::tcp::endpoint remoteEndpoint;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
 
-        Implementation(std::string sessionId, std::weak_ptr<Controller> controller);
+        Implementation(
+            std::string sessionId,
+            std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
+            std::shared_ptr<Roar::WebsocketSession> ws);
     };
     //---------------------------------------------------------------------------------------------------------------------
-    ControlSession::Implementation::Implementation(std::string sessionId, std::weak_ptr<Controller> controller)
-        : identity{}
-        , sessionId{std::move(sessionId)}
+    ControlSession::Implementation::Implementation(
+        std::string sessionId,
+        std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
+        std::shared_ptr<Roar::WebsocketSession> ws)
+        : sessionId{std::move(sessionId)}
+        , page_and_control{std::move(PageAndControlProvider)}
+        , ws{std::move(ws)}
+        , identity{}
         , authenticated{false}
-        , controller{controller}
         , textParser{}
         , dispatcher{}
         , remoteEndpoint{}
     {}
     //#####################################################################################################################
     ControlSession::ControlSession(
-        attender::websocket::connection* owner,
-        std::weak_ptr<Controller> controller,
-        std::string sessionId
-    )
-        : attender::websocket::session_base{owner}
-        , impl_{std::make_unique<Implementation>(sessionId, controller)}
+        std::string sessionId,
+        std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
+        std::shared_ptr<Roar::WebsocketSession> ws)
+        : impl_{
+              std::make_unique<Implementation>(std::move(sessionId), std::move(PageAndControlProvider), std::move(ws))}
     {
-        owner->with_stream_do([this](auto& stream)
-        {
-            impl_->remoteEndpoint = boost::beast::get_lowest_layer(stream).socket().remote_endpoint();
-        });
+        doRead();
     }
     //---------------------------------------------------------------------------------------------------------------------
-    boost::asio::ip::tcp::endpoint ControlSession::remoteEndpoint() const
+    void ControlSession::doRead()
     {
-        return impl_->remoteEndpoint;
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    std::shared_ptr<Publisher> ControlSession::getAssociatedPublisher()
-    {
-        auto controller = impl_->controller.lock();
-        if (!controller)
-            return {};
+        impl_->ws->read()
+            .then([weak = weak_from_this()](Roar::WebsocketReadResult readResult) {
+                auto self = weak.lock();
+                if (!self)
+                    return;
 
-        return controller->obtainPublisher(impl_->identity);
+                self->onRead(readResult);
+            })
+            .fail([](Roar::Error const& e) {
+                spdlog::error("Control session read failed: {}", e.toString());
+            });
     }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::subscribe(
-        std::string const& type, 
-        std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback
-    )
-    {
-        impl_->subscriptions.push_back(impl_->dispatcher.subscribe(type, callback));
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    ControlSession::~ControlSession() = default;
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::setup(std::string const& identity)
     {
@@ -103,84 +99,62 @@ namespace TunnelBore::Broker
             {"tunnelId", tunnelId},
             {"publicPort", serviceInfo.publicPort},
             {"hiddenPort", serviceInfo.hiddenPort},
-            {"socketType", "tcp"}
-        });
+            {"socketType", "tcp"}});
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::on_text(std::string_view txt)
+    void ControlSession::onRead(Roar::WebsocketReadResult const& readResult)
     {
-        impl_->textParser.feed(txt);
-        const auto popped = impl_->textParser.popMessage();
-        if (!popped)
-            return;
+        if (!readResult.isBinary)
+        {
+            impl_->textParser.feed(readResult.message);
+            const auto popped = impl_->textParser.popMessage();
+            if (!popped)
+                return;
 
-        std::string ref = "";
-        if (!popped->contains("ref"))
-            spdlog::warn("Message lacks ref, cannot reply with ref.");
+            std::string ref = "";
+            if (!popped->contains("ref"))
+                spdlog::warn("Message lacks ref, cannot reply with ref.");
+            else
+                ref = (*popped)["ref"];
+
+            if (!popped->contains("type"))
+                return respondWithError((*popped)["ref"].get<std::string>(), "Type missing in message.");
+
+            spdlog::info("Message '{}' received", (*popped)["type"].get<std::string>());
+
+            try
+            {
+                onJson(*popped, ref);
+            }
+            catch (std::exception const& exc)
+            {
+                spdlog::error("Error in json consumer: {}", exc.what());
+                return;
+                // FIXME:
+                //  endSession();
+            }
+        }
         else
-            ref = (*popped)["ref"];
-
-        if (!popped->contains("type"))
-            return respondWithError((*popped)["ref"].get<std::string>(), "Type missing in message.");
-
-        spdlog::info("Message '{}' received", (*popped)["type"].get<std::string>());
-
-        try
         {
-            onJson(*popped, ref);
+            spdlog::warn("Binary received on control connection, which is ignored.");
         }
-        catch (std::exception const& exc)
-        {
-            spdlog::error("Error in json consumer: {}", exc.what());
-            endSession();
-        }
+
+        // Restart reading:
+        doRead();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::shared_ptr<Publisher> ControlSession::getAssociatedPublisher()
+    {
+        auto pac = impl_->page_and_control.lock();
+        if (!pac)
+            return {};
+
+        return pac->obtainPublisher(impl_->identity);
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onJson(json const& j, std::string const& ref)
     {
         return impl_->dispatcher.dispatch(j, ref);
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::endSession()
-    {
-        close_connection();
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::onAfterAuthentication()
-    {
-        try
-        {
-            // writeJson(json{
-            //     {"ref", -1},
-            //     {"pluginsLoaded", pluginNames},
-            // });
-        }
-        catch (std::exception const& exc)
-        {
-            spdlog::error("On after authentication error: '{}'", exc.what());
-            writeJson(
-                json{
-                    {"ref", -1},
-                    {"error", exc.what()},
-                },
-                [this](auto, auto) {
-                    endSession();
-                }
-            );
-        }
-        catch (...)
-        {
-            spdlog::error("On after authentication error (nostdexcept)");
-            writeJson(
-                json{
-                    {"ref", -1},
-                    {"error", "Non standard exception caught."},
-                },
-                [this](auto, auto) {
-                    endSession();
-                }
-            );
-        }
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::respondWithError(std::string const& ref, std::string const& msg)
@@ -193,39 +167,26 @@ namespace TunnelBore::Broker
         });
     }
     //---------------------------------------------------------------------------------------------------------------------
-    bool ControlSession::writeText(
-        std::string const& txt,
-        std::function<void(session_base*, std::size_t)> const& on_complete)
+    ControlSession::~ControlSession() = default;
+    //---------------------------------------------------------------------------------------------------------------------
+    boost::asio::ip::tcp::endpoint ControlSession::remoteEndpoint() const
     {
-        return write_text(txt, on_complete);
+        return impl_->remoteEndpoint;
     }
     //---------------------------------------------------------------------------------------------------------------------
-    bool
-    ControlSession::writeJson(json const& j, std::function<void(session_base*, std::size_t)> const& on_complete)
+    Roar::Detail::PromiseTypeBind<
+        Roar::Detail::PromiseTypeBindThen<std::size_t>,
+        Roar::Detail::PromiseTypeBindFail<Roar::Error const&>>
+    ControlSession::writeJson(json const& j)
     {
-        const std::string serialized = j.dump();
-        return writeText(serialized, on_complete);
+        return impl_->ws->send(j.dump());
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::on_write_complete(std::size_t bytesTransferred)
+    void ControlSession::subscribe(
+        std::string const& type,
+        std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback)
     {
-        session_base::on_write_complete(bytesTransferred);
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::on_binary(char const*, std::size_t)
-    {
-        spdlog::warn("Binary was received, but cannot handle binary data.");
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::on_close()
-    {
-        spdlog::info("Control session was closed: {}", impl_->sessionId);
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    void ControlSession::on_error(boost::system::error_code ec, char const*)
-    {
-        spdlog::info("Error in control session: {}.", ec.message());
+        impl_->subscriptions.push_back(impl_->dispatcher.subscribe(type, callback));
     }
     //#####################################################################################################################
-    
 }

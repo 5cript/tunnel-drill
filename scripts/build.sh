@@ -20,12 +20,13 @@ done
 
 # Go to build dir
 CURDIR=$(basename $PWD)
+BUILD_DIR="build/${CCOMPILER}_${BUILD_TYPE,,}"
 if [[ $CURDIR == "scripts" ]]; then
   cd ..
 fi
 mkdir -p build
-mkdir -p "build/${CCOMPILER}_${BUILD_TYPE,,}"
-cd "build/${CCOMPILER}_${BUILD_TYPE,,}"
+mkdir -p ${BUILD_DIR}
+cd ${BUILD_DIR}
 
 export CXX=$COMPILER
 export CC=$CCOMPILER
@@ -48,6 +49,7 @@ fi
 cmake \
   -G"${CMAKE_GENERATOR}" \
   -DMSYS2_CLANG=$IS_MSYS2_CLANG \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
   -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
   -DJWT_DISABLE_PICOJSON=on \
   -DJWT_BUILD_EXAMPLES=off \
@@ -57,5 +59,9 @@ cmake \
   -DCMAKE_LINKER=$LINKER \
   -DCMAKE_CXX_STANDARD=20 \
   ../..
+
+cd ../..
+node ./scripts/copy_compile_commands.js
+cd ${BUILD_DIR}
 
 make -j$THREADS

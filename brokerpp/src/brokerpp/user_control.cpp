@@ -18,11 +18,20 @@ namespace TunnelBore::Broker
         struct UsersFile
         {
             std::string pepper;
-            std::vector <Publisher> publishers;
+            std::vector<Publisher> publishers;
         };
 
-        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Publisher, identity, pass, salt, maxServices)
-        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(UsersFile, pepper, publishers)
+        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_EX(Publisher, identity, pass, salt, maxServices)
+        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_EX(UsersFile, pepper, publishers)
+    }
+    //#####################################################################################################################
+    User::User(std::string identity)
+        : identity_(std::move(identity))
+    {}
+    //---------------------------------------------------------------------------------------------------------------------
+    std::string User::identity() const
+    {
+        return identity_;
     }
     //#####################################################################################################################
     struct UserControl::Implementation
@@ -30,47 +39,29 @@ namespace TunnelBore::Broker
         UsersFile users;
     };
     //#####################################################################################################################
-    bool UserControl::SingleUseAuthorizer::accept_authentication(std::string_view name, std::string_view password)
-    {
-        for (auto const& user : userControl_->impl_->users.publishers)
-        {
-            if (user.identity == name)
-            {
-                auto hash = attender::sha512(std::string{password} + "_" + user.salt + "_" + userControl_->impl_->users.pepper);
-                if (!hash)
-                    return false;
-
-                if (*hash == user.pass)
-                {
-                    identity_ = name;
-                    return true;
-                }
-
-                return false;
-            }
-        }
-        return false;
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    std::string UserControl::SingleUseAuthorizer::realm() const
-    {
-        return "tunnelBore";
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    std::string UserControl::SingleUseAuthorizer::identity() const
-    {
-        return identity_;
-    }
-    //---------------------------------------------------------------------------------------------------------------------
-    UserControl::SingleUseAuthorizer::SingleUseAuthorizer(UserControl* userControl)
-        : userControl_{userControl}
-    {
-    }
-    //#####################################################################################################################
     UserControl::UserControl()
         : impl_{std::make_unique<Implementation>()}
     {
         impl_->users = json::parse(loadHomeFile("users.json")).get<UsersFile>();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::optional<User> UserControl::getUser(std::string const& name, std::string const& password)
+    {
+        for (auto const& user : impl_->users.publishers)
+        {
+            if (user.identity == name)
+            {
+                auto hash = attender::sha512(std::string{password} + "_" + user.salt + "_" + impl_->users.pepper);
+                if (!hash)
+                    return std::nullopt;
+
+                if (*hash == user.pass)
+                    return User{name};
+
+                return std::nullopt;
+            }
+        }
+        return std::nullopt;
     }
     //---------------------------------------------------------------------------------------------------------------------
     UserControl::~UserControl() = default;
@@ -78,10 +69,5 @@ namespace TunnelBore::Broker
     UserControl::UserControl(UserControl&&) = default;
     //---------------------------------------------------------------------------------------------------------------------
     UserControl& UserControl::operator=(UserControl&&) = default;
-    //---------------------------------------------------------------------------------------------------------------------
-    UserControl::SingleUseAuthorizer UserControl::authenticateOnce()
-    {
-        return SingleUseAuthorizer{this};
-    }
     //#####################################################################################################################
 }

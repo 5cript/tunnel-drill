@@ -20,9 +20,15 @@ namespace TunnelBore::Broker
             unsigned short publicPort;
         };
 
-        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PublisherConnectionMessage, identity, tunnelId, serviceId, hiddenPort, publicPort)
+        NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_EX(
+            PublisherConnectionMessage,
+            identity,
+            tunnelId,
+            serviceId,
+            hiddenPort,
+            publicPort)
     }
-//#####################################################################################################################
+    //#####################################################################################################################
     struct TunnelSession::Implementation
     {
         boost::asio::ip::tcp::socket socket;
@@ -36,11 +42,10 @@ namespace TunnelBore::Broker
         std::recursive_mutex closeLock;
 
         Implementation(
-            boost::asio::ip::tcp::socket&& socket, 
-            std::string tunnelId, 
+            boost::asio::ip::tcp::socket&& socket,
+            std::string tunnelId,
             std::weak_ptr<ControlSession> controlSession,
-            std::weak_ptr<Service> service
-        )
+            std::weak_ptr<Service> service)
             : socket{std::move(socket)}
             , controlSession{std::move(controlSession)}
             , peekBuffer(4096, '\0')
@@ -52,28 +57,25 @@ namespace TunnelBore::Broker
             , closeLock{}
         {}
     };
-//#####################################################################################################################
+    //#####################################################################################################################
     TunnelSession::TunnelSession(
-        boost::asio::ip::tcp::socket&& socket, 
-        std::string tunnelId, 
+        boost::asio::ip::tcp::socket&& socket,
+        std::string tunnelId,
         std::weak_ptr<ControlSession> controlSession,
-        std::weak_ptr<Service> service
-    )
+        std::weak_ptr<Service> service)
         : impl_{std::make_unique<Implementation>(
-            std::move(socket), 
-            std::move(tunnelId), 
-            std::move(controlSession), 
-            std::move(service)
-        )}
+              std::move(socket),
+              std::move(tunnelId),
+              std::move(controlSession),
+              std::move(service))}
     {
         spdlog::info("Tunnel side created.");
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::resetTimer()
     {
         impl_->inactivityTimer.expires_from_now(boost::posix_time::seconds(InactivityTimeout.count()));
-        impl_->inactivityTimer.async_wait([weak = weak_from_this()](auto const& ec) 
-        {
+        impl_->inactivityTimer.async_wait([weak = weak_from_this()](auto const& ec) {
             if (ec == boost::asio::error::operation_aborted)
                 return;
 
@@ -84,7 +86,7 @@ namespace TunnelBore::Broker
             if (ec)
             {
                 // TODO: what to do here?
-                //stop();
+                // stop();
                 return;
             }
 
@@ -98,15 +100,14 @@ namespace TunnelBore::Broker
             }
         });
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::peek()
     {
         resetTimer();
 
         impl_->socket.async_read_some(
-            boost::asio::buffer(impl_->peekBuffer, impl_->peekBuffer.size()), 
-            [weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytesTransferred)
-            {
+            boost::asio::buffer(impl_->peekBuffer, impl_->peekBuffer.size()),
+            [weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytesTransferred) {
                 auto self = weak.lock();
                 if (!self)
                     return;
@@ -121,7 +122,7 @@ namespace TunnelBore::Broker
                     self->close();
                     return;
                 }
-                
+
                 auto controlSession = self->impl_->controlSession.lock();
                 if (!controlSession)
                 {
@@ -132,13 +133,12 @@ namespace TunnelBore::Broker
 
                 if (bytesTransferred > 0 && self->impl_->peekBuffer[0] == '{')
                 {
-                    try 
+                    try
                     {
                         self->impl_->peekBuffer.resize(bytesTransferred);
 
                         // {identity: this.identity, tunnelId, serviceId, hiddenPort, publicPort}
-                        auto connectionMessage = json::parse(self->impl_->peekBuffer)
-                            .get<PublisherConnectionMessage>();
+                        auto connectionMessage = json::parse(self->impl_->peekBuffer).get<PublisherConnectionMessage>();
                         self->impl_->peekBuffer.clear();
 
                         self->impl_->isPublisherSide = true;
@@ -146,29 +146,26 @@ namespace TunnelBore::Broker
                         const auto remoteEndpoint = controlSession->remoteEndpoint();
                         if (self->impl_->socket.remote_endpoint().address() != remoteEndpoint.address())
                         {
-                            spdlog::warn("Received tunnel info from another remote than the control socket. This is not allowed.");
+                            spdlog::warn(
+                                "Received tunnel info from another remote than the control socket. This is not "
+                                "allowed.");
                             self->close();
                             return;
                         }
 
-                        service->connectTunnels(
-                            connectionMessage.tunnelId,
-                            self->impl_->tunnelId
-                        );
+                        service->connectTunnels(connectionMessage.tunnelId, self->impl_->tunnelId);
                         return;
                     }
-                    catch(...) 
-                    {
-                    }
+                    catch (...)
+                    {}
                 }
 
-                // assume this is not json from 
+                // assume this is not json from
                 self->impl_->isPublisherSide = false;
                 controlSession->informAboutConnection(service->serviceId(), self->impl_->tunnelId);
-            }
-        );
+            });
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::link(TunnelSession& other)
     {
         spdlog::info("Connecting tunnel '{}' with '{}'.", impl_->tunnelId, other.impl_->tunnelId);
@@ -178,17 +175,16 @@ namespace TunnelBore::Broker
         {
             boost::asio::async_write(
                 other.impl_->socket,
-                boost::asio::buffer(impl_->peekBuffer), 
-                [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t)
-            {
-                if (ec)
-                {
-                    self->close();
-                    otherSelf->close();
-                    return;
-                }
-                self->pipeTo(*otherSelf);
-            });
+                boost::asio::buffer(impl_->peekBuffer),
+                [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t) {
+                    if (ec)
+                    {
+                        self->close();
+                        otherSelf->close();
+                        return;
+                    }
+                    self->pipeTo(*otherSelf);
+                });
         }
         else
             pipeTo(other);
@@ -198,45 +194,35 @@ namespace TunnelBore::Broker
         {
             boost::asio::async_write(
                 impl_->socket,
-                boost::asio::buffer(other.impl_->peekBuffer), 
-                [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t)
-            {
-                if (ec)
-                {
-                    self->close();
-                    otherSelf->close();
-                    return;
-                }
-                otherSelf->pipeTo(*self);
-            });
+                boost::asio::buffer(other.impl_->peekBuffer),
+                [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t) {
+                    if (ec)
+                    {
+                        self->close();
+                        otherSelf->close();
+                        return;
+                    }
+                    otherSelf->pipeTo(*self);
+                });
         }
         else
             other.pipeTo(*this);
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::pipeTo(TunnelSession& other)
     {
         auto doPipe = std::make_shared<std::function<void(
-            std::shared_ptr<TunnelSession>, 
-            std::shared_ptr<TunnelSession>, 
-            std::shared_ptr <std::string>
-        )>>();
+            std::shared_ptr<TunnelSession>, std::shared_ptr<TunnelSession>, std::shared_ptr<std::string>)>>();
         *doPipe = [doPipe](
-            std::shared_ptr<TunnelSession> self, 
-            std::shared_ptr<TunnelSession> other, 
-            std::shared_ptr <std::string> buffer
-        )
-        {
+                      std::shared_ptr<TunnelSession> self,
+                      std::shared_ptr<TunnelSession> other,
+                      std::shared_ptr<std::string> buffer) {
             self->impl_->socket.async_read_some(
                 boost::asio::buffer(*buffer),
-                [
-                    self = std::move(self), 
-                    otherSelf = std::move(other), 
-                    buffer = std::move(buffer), 
-                    doPipe = std::move(doPipe)
-                ]
-                (auto const& ec, std::size_t bytesTransferred)
-                {
+                [self = std::move(self),
+                 otherSelf = std::move(other),
+                 buffer = std::move(buffer),
+                 doPipe = std::move(doPipe)](auto const& ec, std::size_t bytesTransferred) {
                     if (ec)
                     {
                         self->close();
@@ -248,10 +234,12 @@ namespace TunnelBore::Broker
                     boost::asio::async_write(
                         otherSelf->impl_->socket,
                         boost::asio::buffer(*buffer, bytesTransferred),
-                        [self = std::move(self), otherSelf = std::move(otherSelf), buffer = std::move(buffer), doPipe = std::move(doPipe), close = ec.operator bool()]
-                        (auto const& ec, std::size_t)
-                        {
-                            if  (ec || close)
+                        [self = std::move(self),
+                         otherSelf = std::move(otherSelf),
+                         buffer = std::move(buffer),
+                         doPipe = std::move(doPipe),
+                         close = ec.operator bool()](auto const& ec, std::size_t) {
+                            if (ec || close)
                             {
                                 self->close();
                                 otherSelf->close();
@@ -261,22 +249,19 @@ namespace TunnelBore::Broker
                             self->resetTimer();
                             otherSelf->resetTimer();
                             (*doPipe)(std::move(self), std::move(otherSelf), std::move(buffer));
-                        }
-                    );
-                }
-            );
+                        });
+                });
         };
         (*doPipe)(shared_from_this(), other.shared_from_this(), std::make_shared<std::string>(4096, '\0'));
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::delayedClose()
     {
         auto delayTimer = std::make_shared<boost::asio::deadline_timer>(impl_->socket.get_executor());
         delayTimer->expires_from_now(boost::posix_time::seconds{1});
-        impl_->inactivityTimer.async_wait([weak = weak_from_this(), delayTimer](auto const& ec) 
-        {
+        impl_->inactivityTimer.async_wait([weak = weak_from_this(), delayTimer](auto const& ec) {
             if (ec == boost::asio::error::operation_aborted)
-                return;            
+                return;
 
             auto self = weak.lock();
             if (!self)
@@ -285,7 +270,7 @@ namespace TunnelBore::Broker
             self->close();
         });
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::close()
     {
         std::scoped_lock lock{impl_->closeLock};
@@ -304,17 +289,17 @@ namespace TunnelBore::Broker
         auto service = impl_->service.lock();
         if (!service)
             return;
-        
+
         service->closeTunnelSide(impl_->tunnelId);
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     TunnelSession::~TunnelSession()
     {
         close();
     }
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     TunnelSession::TunnelSession(TunnelSession&&) = default;
-//---------------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------------
     TunnelSession& TunnelSession::operator=(TunnelSession&&) = default;
-//#####################################################################################################################
+    //#####################################################################################################################
 }

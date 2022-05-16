@@ -1,30 +1,28 @@
 #pragma once
 
-#include <attender/session/basic_authorizer.hpp>
-
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace TunnelBore::Broker
 {
+    class User
+    {
+        friend class UserControl;
+
+      private:
+        User(std::string identity);
+
+      public:
+        std::string identity() const;
+
+      private:
+        std::string identity_;
+    };
+
     class UserControl
     {
-    public:
-        class SingleUseAuthorizer : public attender::basic_authorizer
-        {
-        public:
-            SingleUseAuthorizer(UserControl* userControl);
-
-            bool accept_authentication(std::string_view user, std::string_view password) override;
-            std::string realm() const override;
-
-        public:
-            std::string identity() const;
-
-        private:
-            UserControl* userControl_;
-            std::string identity_;
-        };
-
+      public:
         UserControl();
         ~UserControl();
         UserControl(UserControl const&) = delete;
@@ -32,9 +30,9 @@ namespace TunnelBore::Broker
         UserControl& operator=(UserControl const&) = delete;
         UserControl& operator=(UserControl&&);
 
-        SingleUseAuthorizer authenticateOnce();
+        std::optional<User> getUser(std::string const& name, std::string const& password);
 
-    private:
+      private:
         struct Implementation;
         std::unique_ptr<Implementation> impl_;
     };

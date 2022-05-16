@@ -12,25 +12,25 @@
 namespace TunnelBore::Broker
 {
 
-class Controller : public std::enable_shared_from_this <Controller>
-{
-public:
-    Controller(boost::asio::io_context& context, std::function <void(boost::system::error_code)> on_error);
-    ~Controller();
+    class Controller : public std::enable_shared_from_this<Controller>
+    {
+      public:
+        Controller(boost::asio::io_context& context, std::function<void(boost::system::error_code)> on_error);
+        ~Controller();
 
-    void start(unsigned short port);
-    void stop();
+        void start(unsigned short port);
+        void stop();
 
-    std::shared_ptr<Publisher> obtainPublisher(std::string const& identity);
+        std::shared_ptr<Publisher> obtainPublisher(std::string const& identity);
 
-private:
-    boost::asio::io_context* context_;
-    attender::websocket::server ws_;
-    std::mutex guard_;
-    std::unordered_map<std::string, std::shared_ptr<attender::websocket::connection>> connections_;
-    attender::uuid_generator generator_;
+      private:
+        boost::asio::io_context* context_;
+        attender::websocket::server ws_;
+        std::mutex guard_;
+        std::unordered_map<std::string, std::shared_ptr<attender::websocket::connection>> connections_;
+        attender::uuid_generator generator_;
 
-    std::unordered_map<std::string, std::shared_ptr<Publisher>> publishers_;
-};
+        std::unordered_map<std::string, std::shared_ptr<Publisher>> publishers_;
+    };
 
 }

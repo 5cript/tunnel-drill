@@ -1,5 +1,4 @@
 add_library(broker-lib STATIC
-  brokerpp/controller.cpp
   brokerpp/config.cpp
   brokerpp/load_home_file.cpp
   brokerpp/user_control.cpp
@@ -10,6 +9,8 @@ add_library(broker-lib STATIC
   brokerpp/publisher/publisher.cpp
   brokerpp/publisher/service.cpp
   brokerpp/publisher/tunnel_session.cpp
+  brokerpp/request_listener/authenticator.cpp
+  brokerpp/request_listener/page_control_provider.cpp
 )
 
 target_include_directories(
@@ -25,6 +26,7 @@ target_link_libraries(
     project-warnings
     special_paths
   PUBLIC
+    roar
     attender
     spdlog
     jwt-cpp::jwt-cpp

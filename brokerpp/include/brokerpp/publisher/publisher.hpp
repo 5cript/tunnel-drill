@@ -10,10 +10,10 @@ namespace TunnelBore::Broker
 {
     class Service;
 
-    class Publisher : public std::enable_shared_from_this <Publisher>
+    class Publisher : public std::enable_shared_from_this<Publisher>
     {
-    public:
-        Publisher(boost::asio::io_context* context, std::string identity);
+      public:
+        Publisher(boost::asio::any_io_executor executor, std::string identity);
         ~Publisher();
         Publisher(Publisher const&) = delete;
         Publisher(Publisher&&);
@@ -27,11 +27,11 @@ namespace TunnelBore::Broker
 
         bool addService(ServiceInfo serviceInfo);
 
-    private:
+      private:
         void addServices(std::vector<ServiceInfo> const& services);
         void clearServices();
 
-    private:
+      private:
         struct Implementation;
         std::unique_ptr<Implementation> impl_;
     };

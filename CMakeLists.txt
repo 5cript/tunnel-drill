@@ -8,6 +8,7 @@ include(./cmake/common.cmake)
 set(JWT_DISABLE_PICOJSON ON CACHE BOOL "no picojson")
 
 # Submodules
+add_subdirectory(roar)
 add_subdirectory(jwt-cpp)
 add_subdirectory(special-paths)
 add_subdirectory(attender)
