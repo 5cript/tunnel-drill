@@ -26,7 +26,11 @@ int main()
     using namespace TunnelBore::Broker;
     using namespace std::string_literals;
 
+    setupHome();
+
     boost::asio::thread_pool pool{IoContextThreadPoolSize};
+
+    spdlog::info("Config files are at '{}'", getHomePath().string());
 
     Roar::Server server(
         {.executor = pool.executor(),
@@ -42,15 +46,10 @@ int main()
     server.installRequestListener<Authenticator>(privateJwt);
     server.installRequestListener<PageAndControlProvider>(pool.executor(), publicJwt);
 
-    // auto controller = std::make_shared<Controller>(*context.get_io_context(), [](boost::system::error_code ec) {
-    //     spdlog::error("Error in websocket control line ({}).", ec.message());
-    // });
-
-    // Start websocket control server.
-    // controller->start(config.controlPort);
+    server.start(config.bind.port, config.bind.iface);
 
     // Notify terminal user and wait.
-    spdlog::info("Bound on port '{}'", config.controlPort);
+    spdlog::info("Bound on [{}]:'{}'", config.bind.iface, server.getLocalEndpoint().port());
 
     // TODO: Wait for signal in release mode, enter in debug mode.
     std::cin.get();

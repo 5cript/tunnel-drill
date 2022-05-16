@@ -130,7 +130,7 @@ class Publisher
         const req = https.request({
             hostname: config.authorityHost,
             port: config.authorityPort,
-            path: '/auth',
+            path: '/api/auth',
             method: 'GET',
             rejectUnauthorized: false,
             headers: {
