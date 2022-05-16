@@ -1,6 +1,6 @@
 #include <brokerpp/load_home_file.hpp>
 
-#include <special-paths/special_paths.hpp>
+#include <roar/filesystem/special_paths.hpp>
 #include <fstream>
 #include <sstream>
 
@@ -24,10 +24,16 @@ namespace TunnelBore::Broker
         std::ofstream writer{path, std::ios_base::binary};
         if (!writer.good())
             throw std::runtime_error("Cannot open home file for writing "s + path.string());
-        writer.write(data.c_str(), static_cast <std::streamsize>(data.size()));
+        writer.write(data.c_str(), static_cast<std::streamsize>(data.size()));
     }
     std::filesystem::path getHomePath()
     {
-        return SpecialPaths::getHome() / ".tbore";
+        return Roar::resolvePath("~/.tbore/broker");
+    }
+    void setupHome()
+    {
+        const auto homePath = getHomePath();
+        if (!std::filesystem::exists(homePath))
+            std::filesystem::create_directories(homePath);
     }
 }

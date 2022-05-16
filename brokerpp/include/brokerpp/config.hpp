@@ -4,15 +4,18 @@
 
 namespace TunnelBore::Broker
 {
-
+    struct ServerConfig
+    {
+        std::string iface;
+        unsigned short port;
+    };
     struct Config
     {
-        unsigned short controlPort;
-        // Can in future hopefully be controlPort or removed due to keycloak, auth0, ...
-        unsigned short authorityPort;
+        ServerConfig bind;
     };
 
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, controlPort, authorityPort)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ServerConfig, iface, port)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, bind)
 
     Config loadConfig();
     void saveConfig(Config const& config);
