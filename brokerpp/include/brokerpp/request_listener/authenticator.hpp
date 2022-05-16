@@ -17,7 +17,7 @@ namespace TunnelBore::Broker
       private:
         ROAR_MAKE_LISTENER(Authenticator);
 
-        ROAR_GET(auth)("/auth");
+        ROAR_GET(auth)("/api/auth");
 
       private:
         std::mutex authMutex_;

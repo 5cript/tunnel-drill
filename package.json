@@ -8,6 +8,7 @@
     "build-dev": "webpack --config webpack.dev.js",
     "build": "webpack --config webpack.prod.js",
     "front": "cd ./page && npm run build",
+    "debug:broker": "bash ./scripts/build.sh && cd ./build/clang_debug/bin && gdbserver :12772 broker.exe",
     "broker": "bash ./scripts/build.sh && cd ./build/clang_debug/bin && broker.exe",
     "run:publisher": "cd prod && node ./publisher.cjs",
     "dev:publisher": "cd dist && cross-env DEV_BUILD=1 node ./publisher.cjs",

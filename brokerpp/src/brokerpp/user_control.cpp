@@ -2,7 +2,7 @@
 #include <brokerpp/load_home_file.hpp>
 #include <brokerpp/json.hpp>
 
-#include <attender/utility/sha.hpp>
+#include <roar/utility/sha.hpp>
 
 namespace TunnelBore::Broker
 {
@@ -51,7 +51,8 @@ namespace TunnelBore::Broker
         {
             if (user.identity == name)
             {
-                auto hash = attender::sha512(std::string{password} + "_" + user.salt + "_" + impl_->users.pepper);
+                auto combined = password + "_" + user.salt + "_" + impl_->users.pepper;
+                auto hash = Roar::sha512(combined);
                 if (!hash)
                     return std::nullopt;
 

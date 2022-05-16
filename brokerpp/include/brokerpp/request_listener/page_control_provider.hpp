@@ -27,7 +27,7 @@ namespace TunnelBore::Broker
         ROAR_GET(index)("/");
         ROAR_GET(publisher)
         ({
-            .path = "/publisher",
+            .path = "/api/ws/publisher",
             .routeOptions = {.expectUpgrade = true},
         });
 

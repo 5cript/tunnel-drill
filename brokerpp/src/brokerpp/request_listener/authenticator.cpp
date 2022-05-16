@@ -23,6 +23,7 @@ namespace TunnelBore::Broker
         auto basic = request.basicAuth();
         if (!basic)
         {
+            spdlog::warn("User '{}' failed to provide basic auth.", basic->user);
             return (void)session.send<empty_body>(request)->rejectAuthorization("Basic realm=tunnelBore").commit();
         }
         auto user = userControl_.getUser(basic->user, basic->password);
