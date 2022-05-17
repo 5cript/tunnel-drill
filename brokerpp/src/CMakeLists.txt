@@ -2,6 +2,7 @@ add_library(broker-lib STATIC
   brokerpp/config.cpp
   brokerpp/load_home_file.cpp
   brokerpp/user_control.cpp
+  brokerpp/authority.cpp
   brokerpp/control/control_session.cpp
   brokerpp/control/subscription.cpp
   brokerpp/control/dispatcher.cpp
@@ -9,6 +10,7 @@ add_library(broker-lib STATIC
   brokerpp/publisher/publisher.cpp
   brokerpp/publisher/service.cpp
   brokerpp/publisher/tunnel_session.cpp
+  brokerpp/publisher/publisher_token.cpp
   brokerpp/request_listener/authenticator.cpp
   brokerpp/request_listener/page_control_provider.cpp
 )

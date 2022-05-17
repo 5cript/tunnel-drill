@@ -43,7 +43,9 @@ int main()
     const auto publicJwt = loadHomeFile("jwt/public.key");
     const auto config = loadConfig();
 
-    server.installRequestListener<Authenticator>(privateJwt);
+    auto authority = std::make_shared<Authority>(privateJwt);
+
+    server.installRequestListener<Authenticator>(authority);
     server.installRequestListener<PageAndControlProvider>(pool.executor(), publicJwt);
 
     server.start(config.bind.port, config.bind.iface);

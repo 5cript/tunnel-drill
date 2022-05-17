@@ -11,6 +11,8 @@ namespace TunnelBore::Broker
 {
     namespace
     {
+        constexpr std::string_view publisherToBrokerPrefix = "TUNNEL_BORE_P2B";
+
         struct PublisherConnectionMessage
         {
             std::string identity;
@@ -131,36 +133,57 @@ namespace TunnelBore::Broker
                     return;
                 }
 
-                if (bytesTransferred > 0 && self->impl_->peekBuffer[0] == '{')
+                if (bytesTransferred > 0 && self->impl_->peekBuffer.starts_with(publisherToBrokerPrefix))
                 {
                     try
                     {
-                        self->impl_->peekBuffer.resize(bytesTransferred);
+                        self->impl_->peekBuffer = self->impl_->peekBuffer.substr(
+                            publisherToBrokerPrefix.size() + 1, bytesTransferred - publisherToBrokerPrefix.size() - 1);
 
-                        // {identity: this.identity, tunnelId, serviceId, hiddenPort, publicPort}
-                        auto connectionMessage = json::parse(self->impl_->peekBuffer).get<PublisherConnectionMessage>();
+                        // {identity, tunnelId, serviceId, hiddenPort, publicPort}
+                        auto token = controlSession->verifyPublisherIdentity(self->impl_->peekBuffer);
                         self->impl_->peekBuffer.clear();
 
-                        self->impl_->isPublisherSide = true;
-
-                        const auto remoteEndpoint = controlSession->remoteEndpoint();
-                        if (self->impl_->socket.remote_endpoint().address() != remoteEndpoint.address())
+                        if (!token)
                         {
-                            spdlog::warn(
-                                "Received tunnel info from another remote than the control socket. This is not "
-                                "allowed.");
+                            spdlog::warn("Invalid publisher identity, this will terminate this tunnel.");
                             self->close();
                             return;
                         }
 
-                        service->connectTunnels(connectionMessage.tunnelId, self->impl_->tunnelId);
+                        self->impl_->isPublisherSide = true;
+
+                        if (token->identity() != controlSession->identity())
+                        {
+                            spdlog::warn(
+                                "Received tunnel info from another remote than the control socket. This is not "
+                                "allowed. Tunnel identity: '{}', control identity: '{}'.",
+                                token->identity(),
+                                controlSession->identity());
+                            self->close();
+                            return;
+                        }
+
+                        service->connectTunnels(token->claims()["tunnelId"].get<std::string>(), self->impl_->tunnelId);
                         return;
                     }
-                    catch (...)
-                    {}
+                    catch (std::exception const& exc)
+                    {
+                        spdlog::warn(
+                            "Exception in attempt to parse tunnel connection from publisher: '{}'", exc.what());
+                        self->close();
+                        return;
+                    }
+                }
+                else
+                {
+                    spdlog::info(
+                        "Connection does not look like publisher side. Bytes received '{}', Starting with '{}'.",
+                        bytesTransferred,
+                        self->impl_->peekBuffer.substr(0, std::min(std::size_t{24}, bytesTransferred)));
                 }
 
-                // assume this is not json from
+                // assume this is not json from the publisher side.
                 self->impl_->isPublisherSide = false;
                 controlSession->informAboutConnection(service->serviceId(), self->impl_->tunnelId);
             });

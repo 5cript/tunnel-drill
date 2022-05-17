@@ -1,5 +1,6 @@
 #pragma once
 
+#include <brokerpp/authority.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
 #include <memory>

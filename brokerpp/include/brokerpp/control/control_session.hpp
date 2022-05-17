@@ -1,5 +1,6 @@
 #pragma once
 
+#include <brokerpp/publisher/publisher_token.hpp>
 #include <brokerpp/json.hpp>
 #include <brokerpp/control/subscription.hpp>
 #include <roar/websocket/websocket_session.hpp>
@@ -20,12 +21,14 @@ namespace TunnelBore::Broker
             std::string sessionId,
             std::weak_ptr<PageAndControlProvider> controller,
             std::shared_ptr<Roar::WebsocketSession> ws,
-            std::function<void()> endSelf);
+            std::function<void()> endSelf,
+            std::string publicJwtKey);
         ~ControlSession();
         ControlSession(ControlSession&&) = delete;
         ControlSession(ControlSession const&) = delete;
         ControlSession& operator=(ControlSession&&) = delete;
         ControlSession& operator=(ControlSession const&) = delete;
+        std::optional<PublisherToken> verifyPublisherIdentity(std::string const& token) const;
 
         Roar::Detail::PromiseTypeBind<
             Roar::Detail::PromiseTypeBindThen<std::size_t>,

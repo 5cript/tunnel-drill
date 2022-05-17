@@ -2,6 +2,7 @@
 #include <brokerpp/request_listener/page_control_provider.hpp>
 #include <brokerpp/control/control_session.hpp>
 #include <brokerpp/publisher/publisher.hpp>
+#include <brokerpp/publisher/publisher_token.hpp>
 
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/nlohmann-json/traits.h>
@@ -45,6 +46,7 @@ namespace TunnelBore::Broker
     void PageAndControlProvider::publisher(Session& session, EmptyBodyRequest&& req)
     {
         auto closeWithFailure = [&session, &req](std::string_view reason) {
+            spdlog::warn("Publisher control socket was rejected: '{}'", reason);
             session.send<string_body>(req)
                 ->rejectAuthorization("Bearer realm=tunnelBore")
                 .body(reason)
@@ -52,46 +54,40 @@ namespace TunnelBore::Broker
                 .fail([](auto) {});
         };
 
-        auto token = req.bearerAuth();
+        auto tokenData = req.bearerAuth();
+        if (!tokenData)
+            return closeWithFailure("Missing bearer auth.");
+
+        auto token = verifyPublisherToken(*tokenData, impl_->publicJwt);
         if (!token)
-            return closeWithFailure("Bearer realm=tunnelBore");
-
-        const auto decoded = jwt::decode<jwt::traits::nlohmann_json>(*token);
-
-        const auto verifier = jwt::verify<jwt::traits::nlohmann_json>()
-                                  .allow_algorithm(jwt::algorithm::rs256{impl_->publicJwt, "", "", ""})
-                                  .with_issuer("tunnelBore");
-        std::error_code ec;
-        verifier.verify(decoded, ec);
-        if (ec)
             return closeWithFailure("Token was rejected.");
-
-        const auto claims = decoded.get_payload_claims();
-        auto ident = claims.find("identity");
-        if (ident == std::end(claims))
-            return closeWithFailure("Token lacks identity claim.");
 
         // session.setup(ident->second.to_json().get<std::string>());
 
         session.upgrade(req)
-            .then(
-                [weak = weak_from_this(), identity = ident->second.as_string()](std::shared_ptr<WebsocketSession> ws) {
-                    // TODO:
-                    auto self = weak.lock();
-                    if (!self)
-                        return;
+            .then([weak = weak_from_this(), identity = token->identity()](std::shared_ptr<WebsocketSession> ws) {
+                // TODO:
+                auto self = weak.lock();
+                if (!self)
+                    return;
 
-                    auto cs = std::make_shared<ControlSession>(identity, weak, std::move(ws), [weak, identity]() {
+                auto cs = std::make_shared<ControlSession>(
+                    identity,
+                    weak,
+                    std::move(ws),
+                    [weak, identity]() {
                         auto self = weak.lock();
                         if (!self)
                             return;
 
+                        std::scoped_lock lock{self->impl_->controlSessionMutex};
                         self->impl_->controlSessions.erase(identity);
-                    });
-                    cs->setup(identity);
-                    std::scoped_lock lock{self->impl_->controlSessionMutex};
-                    self->impl_->controlSessions[identity] = cs;
-                })
+                    },
+                    self->impl_->publicJwt);
+                cs->setup(identity);
+                std::scoped_lock lock{self->impl_->controlSessionMutex};
+                self->impl_->controlSessions[identity] = cs;
+            })
             .fail([](Error const& e) {
                 spdlog::error("Websocket upgrade failed: '{}'.", e.toString());
             });

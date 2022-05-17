@@ -13,6 +13,8 @@ import { HandshakeMessage } from "../../shared/control_messages/handshake";
 import jwt from 'jsonwebtoken';
 import Config from "./config";
 
+const p2bTunnelPrefix = "TUNNEL_BORE_P2B";
+
 class LocalService implements ServiceInfo
 {
     name?: string;
@@ -40,7 +42,7 @@ class LocalService implements ServiceInfo
         const id = generateUuid();
         if (this.socketType === 'tcp')
         {
-            this.tcpSessions[id] = new TcpSession(this.publicPort, this.hiddenPort, brokerHost, JSON.stringify(token), () => {
+            this.tcpSessions[id] = new TcpSession(this.publicPort, this.hiddenPort, brokerHost, p2bTunnelPrefix + ':' + token, () => {
                 this.freeSession(id);
             }, this.hiddenHost);
         }
@@ -51,7 +53,7 @@ class LocalService implements ServiceInfo
                 hiddenPort: this.hiddenPort, 
                 brokerHost, 
                 socketType: this.socketType, 
-                token: JSON.stringify(token), 
+                token: p2bTunnelPrefix + ':' + token, 
                 onAnyClose: () => {
                     this.freeSession(id);
                 },
@@ -97,6 +99,7 @@ class Publisher
     shallDie: boolean;
     identity: string;
     authToken: string;
+    config: Config;
 
     constructor(wsPath: string, config: Config) {
         // FIXME: something better, needs to be solved with authentication later:
@@ -105,6 +108,7 @@ class Publisher
         this.services = {};
         this.messageMap = {};
         this.authToken = '';
+        this.config = config;
 
         config.services.forEach(service => {
             this.services[service.hiddenPort] = new LocalService({
@@ -132,10 +136,8 @@ class Publisher
             port: config.authorityPort,
             path: '/api/auth',
             method: 'GET',
-            rejectUnauthorized: false,
-            headers: {
-                'Authorization': 'Basic ' + Buffer.from(config.identity + ':' + config.passHashed).toString('base64')
-            }
+            auth: this.config.identity + ':' + this.config.passHashed,
+            rejectUnauthorized: false
         }, res => {
             if (res.statusCode !== 200)
             {
@@ -192,11 +194,31 @@ class Publisher
             } as UdpRelayBoundMessage))
         }
         try {
-            this.services[hiddenPort].createSession(this.brokerHost, 
-                // sent on tcp client to broker:
-                // should not become more than 4096 bytes when serialized.
-                {identity: this.identity, tunnelId, serviceId, hiddenPort, publicPort}
-            , onBound);
+            const req = https.request({
+                hostname: this.config.authorityHost,
+                port: this.config.authorityPort,
+                path: '/api/auth/sign-json',
+                method: 'POST',
+                rejectUnauthorized: false,
+                auth: this.config.identity + ':' + this.config.passHashed,
+            }, res => {
+                if (res.statusCode !== 200)
+                {
+                    winston.error(`Could not authenticate with authority to sign p2b tunnel. (Status code: ${res.statusCode})`);
+                    process.exit(1);
+                }
+                res.on('data', tokenJson => {
+                    const token = JSON.parse(tokenJson).token;
+                    this.services[hiddenPort].createSession(this.brokerHost, token, onBound);
+                })
+            });
+            
+            req.on('error', error => {
+                winston.error(`Error in authentication request ${error.message}`);
+                process.exit(1);
+            })
+            req.write(JSON.stringify({tunnelId, serviceId, hiddenPort, publicPort}));    
+            req.end();
         }
         catch (error) {
             replyWithFailure(error.message);

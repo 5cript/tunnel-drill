@@ -1,3 +1,4 @@
+#include <brokerpp/publisher/publisher_token.hpp>
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/control/control_session.hpp>
 #include <brokerpp/control/dispatcher.hpp>
@@ -24,6 +25,7 @@ namespace TunnelBore::Broker
         Dispatcher dispatcher;
         boost::asio::ip::tcp::endpoint remoteEndpoint;
         std::function<void()> endSelf;
+        std::string publicJwtKey;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
 
@@ -31,14 +33,16 @@ namespace TunnelBore::Broker
             std::string sessionId,
             std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
             std::shared_ptr<Roar::WebsocketSession> ws,
-            std::function<void()> endSelf);
+            std::function<void()> endSelf,
+            std::string publicJwtKey);
     };
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::Implementation::Implementation(
         std::string sessionId,
         std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
         std::shared_ptr<Roar::WebsocketSession> ws,
-        std::function<void()> endSelf)
+        std::function<void()> endSelf,
+        std::string publicJwtKey)
         : sessionId{std::move(sessionId)}
         , page_and_control{std::move(PageAndControlProvider)}
         , ws{std::move(ws)}
@@ -48,6 +52,7 @@ namespace TunnelBore::Broker
         , dispatcher{}
         , remoteEndpoint{}
         , endSelf{std::move(endSelf)}
+        , publicJwtKey{std::move(publicJwtKey)}
         , subscriptions{}
     {}
     //#####################################################################################################################
@@ -55,19 +60,19 @@ namespace TunnelBore::Broker
         std::string sessionId,
         std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
         std::shared_ptr<Roar::WebsocketSession> ws,
-        std::function<void()> endSelf)
+        std::function<void()> endSelf,
+        std::string publicJwtKey)
         : impl_{std::make_unique<Implementation>(
               std::move(sessionId),
               std::move(PageAndControlProvider),
               std::move(ws),
-              std::move(endSelf))}
-    {
-        doRead();
-    }
+              std::move(endSelf),
+              std::move(publicJwtKey))}
+    {}
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::doRead()
     {
-        impl_->ws->read()
+        impl_->ws->read_some()
             .then([weak = weak_from_this()](Roar::WebsocketReadResult readResult) {
                 auto self = weak.lock();
                 if (!self)
@@ -85,11 +90,17 @@ namespace TunnelBore::Broker
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
+    std::optional<PublisherToken> ControlSession::verifyPublisherIdentity(std::string const& token) const
+    {
+        return verifyPublisherToken(token, impl_->publicJwtKey);
+    }
+    //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::setup(std::string const& identity)
     {
         impl_->identity = identity;
         auto publisher = getAssociatedPublisher();
         publisher->setCurrentControlSession(weak_from_this());
+        doRead();
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::string ControlSession::identity() const
@@ -134,7 +145,7 @@ namespace TunnelBore::Broker
             if (!popped->contains("type"))
                 return respondWithError((*popped)["ref"].get<std::string>(), "Type missing in message.");
 
-            spdlog::info("Message '{}' received", (*popped)["type"].get<std::string>());
+            spdlog::info("'{}': Message '{}' received", impl_->identity, (*popped)["type"].get<std::string>());
 
             try
             {
@@ -179,7 +190,10 @@ namespace TunnelBore::Broker
         });
     }
     //---------------------------------------------------------------------------------------------------------------------
-    ControlSession::~ControlSession() = default;
+    ControlSession::~ControlSession()
+    {
+        spdlog::info("Control session '{}' destroyed.", impl_->identity);
+    }
     //---------------------------------------------------------------------------------------------------------------------
     boost::asio::ip::tcp::endpoint ControlSession::remoteEndpoint() const
     {
