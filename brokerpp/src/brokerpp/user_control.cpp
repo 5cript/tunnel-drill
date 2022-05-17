@@ -4,9 +4,6 @@
 
 #include <roar/utility/sha.hpp>
 
-#include <iostream>
-#include <iomanip>
-
 namespace TunnelBore::Broker
 {
     namespace
@@ -55,17 +52,9 @@ namespace TunnelBore::Broker
             if (user.identity == name)
             {
                 auto combined = password + "_" + user.salt + "_" + impl_->users.pepper;
-                std::cout << combined << std::endl;
-                for (auto const& c : combined)
-                {
-                    std::cout << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(c) << ' ';
-                }
-                std::cout << "\n";
                 auto hash = Roar::sha512(combined);
                 if (!hash)
                     return std::nullopt;
-
-                std::cout << *hash << "\n";
 
                 if (*hash == user.pass)
                     return User{name};

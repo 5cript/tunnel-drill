@@ -19,7 +19,8 @@ namespace TunnelBore::Broker
         ControlSession(
             std::string sessionId,
             std::weak_ptr<PageAndControlProvider> controller,
-            std::shared_ptr<Roar::WebsocketSession> ws);
+            std::shared_ptr<Roar::WebsocketSession> ws,
+            std::function<void()> endSelf);
         ~ControlSession();
         ControlSession(ControlSession&&) = delete;
         ControlSession(ControlSession const&) = delete;

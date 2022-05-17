@@ -19,10 +19,15 @@ namespace TunnelBore::Broker
         std::string publicJwt;
         std::unordered_map<std::string, std::shared_ptr<Publisher>> publishers;
 
+        std::mutex controlSessionMutex;
+        std::unordered_map<std::string, std::shared_ptr<ControlSession>> controlSessions;
+
         Implementation(boost::asio::any_io_executor executor, std::string publicJwt)
             : executor{std::move(executor)}
             , publicJwt{std::move(publicJwt)}
             , publishers{}
+            , controlSessionMutex{}
+            , controlSessions{}
         {}
     };
     //#####################################################################################################################
@@ -72,7 +77,20 @@ namespace TunnelBore::Broker
             .then(
                 [weak = weak_from_this(), identity = ident->second.as_string()](std::shared_ptr<WebsocketSession> ws) {
                     // TODO:
-                    auto cs = std::make_shared<ControlSession>(identity, weak, std::move(ws));
+                    auto self = weak.lock();
+                    if (!self)
+                        return;
+
+                    auto cs = std::make_shared<ControlSession>(identity, weak, std::move(ws), [weak, identity]() {
+                        auto self = weak.lock();
+                        if (!self)
+                            return;
+
+                        self->impl_->controlSessions.erase(identity);
+                    });
+                    cs->setup(identity);
+                    std::scoped_lock lock{self->impl_->controlSessionMutex};
+                    self->impl_->controlSessions[identity] = cs;
                 })
             .fail([](Error const& e) {
                 spdlog::error("Websocket upgrade failed: '{}'.", e.toString());
@@ -81,7 +99,6 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     std::shared_ptr<Publisher> PageAndControlProvider::obtainPublisher(std::string const& identity)
     {
-
         auto pubIter = impl_->publishers.find(identity);
         if (pubIter == impl_->publishers.end())
         {

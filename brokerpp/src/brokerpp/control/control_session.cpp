@@ -23,19 +23,22 @@ namespace TunnelBore::Broker
         StreamParser textParser;
         Dispatcher dispatcher;
         boost::asio::ip::tcp::endpoint remoteEndpoint;
+        std::function<void()> endSelf;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
 
         Implementation(
             std::string sessionId,
             std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
-            std::shared_ptr<Roar::WebsocketSession> ws);
+            std::shared_ptr<Roar::WebsocketSession> ws,
+            std::function<void()> endSelf);
     };
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::Implementation::Implementation(
         std::string sessionId,
         std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
-        std::shared_ptr<Roar::WebsocketSession> ws)
+        std::shared_ptr<Roar::WebsocketSession> ws,
+        std::function<void()> endSelf)
         : sessionId{std::move(sessionId)}
         , page_and_control{std::move(PageAndControlProvider)}
         , ws{std::move(ws)}
@@ -44,14 +47,20 @@ namespace TunnelBore::Broker
         , textParser{}
         , dispatcher{}
         , remoteEndpoint{}
+        , endSelf{std::move(endSelf)}
+        , subscriptions{}
     {}
     //#####################################################################################################################
     ControlSession::ControlSession(
         std::string sessionId,
         std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
-        std::shared_ptr<Roar::WebsocketSession> ws)
-        : impl_{
-              std::make_unique<Implementation>(std::move(sessionId), std::move(PageAndControlProvider), std::move(ws))}
+        std::shared_ptr<Roar::WebsocketSession> ws,
+        std::function<void()> endSelf)
+        : impl_{std::make_unique<Implementation>(
+              std::move(sessionId),
+              std::move(PageAndControlProvider),
+              std::move(ws),
+              std::move(endSelf))}
     {
         doRead();
     }
@@ -66,8 +75,13 @@ namespace TunnelBore::Broker
 
                 self->onRead(readResult);
             })
-            .fail([](Roar::Error const& e) {
+            .fail([weak = weak_from_this()](Roar::Error const& e) {
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
                 spdlog::error("Control session read failed: {}", e.toString());
+                self->impl_->endSelf();
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -88,7 +102,7 @@ namespace TunnelBore::Broker
         auto publisher = getAssociatedPublisher();
         auto service = publisher->getService(serviceId);
         if (!service)
-            return;
+            return; // TODO: handle error
 
         auto serviceInfo = service->info();
 
@@ -129,9 +143,7 @@ namespace TunnelBore::Broker
             catch (std::exception const& exc)
             {
                 spdlog::error("Error in json consumer: {}", exc.what());
-                return;
-                // FIXME:
-                //  endSession();
+                impl_->endSelf();
             }
         }
         else
@@ -179,7 +191,21 @@ namespace TunnelBore::Broker
         Roar::Detail::PromiseTypeBindFail<Roar::Error const&>>
     ControlSession::writeJson(json const& j)
     {
-        return impl_->ws->send(j.dump());
+        return promise::newPromise([this, &j](promise::Defer d) {
+            impl_->ws->send(j.dump())
+                .then([d](std::size_t amount) {
+                    d.resolve(amount);
+                })
+                .fail([d, weak = weak_from_this()](Roar::Error const& error) {
+                    auto self = weak.lock();
+                    if (!self)
+                        return d.reject(error);
+
+                    spdlog::error("Failed to send message: {}", error.toString());
+                    self->impl_->endSelf();
+                    d.reject(error);
+                });
+        });
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::subscribe(
