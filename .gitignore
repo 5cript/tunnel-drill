@@ -6,3 +6,5 @@ dist
 prod
 compile_commands.json
 .cache
+tunnel-control/node_modules
+page_old/node_modules
