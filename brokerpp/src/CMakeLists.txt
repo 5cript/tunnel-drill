@@ -3,6 +3,7 @@ add_library(broker-lib STATIC
   brokerpp/load_home_file.cpp
   brokerpp/user_control.cpp
   brokerpp/authority.cpp
+  brokerpp/program_options.cpp
   brokerpp/control/control_session.cpp
   brokerpp/control/subscription.cpp
   brokerpp/control/dispatcher.cpp
@@ -21,6 +22,8 @@ target_include_directories(
   ${CMAKE_SOURCE_DIR}/brokerpp/include
 )
 
+find_package(Boost 1.78.0 REQUIRED COMPONENTS system program_options)
+
 target_link_libraries(
   broker-lib
   PRIVATE
@@ -32,6 +35,7 @@ target_link_libraries(
     attender
     spdlog
     jwt-cpp::jwt-cpp
+    Boost::program_options
 )
 
 add_executable(broker 

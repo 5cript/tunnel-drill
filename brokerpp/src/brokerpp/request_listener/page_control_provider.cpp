@@ -22,25 +22,60 @@ namespace TunnelBore::Broker
 
         std::mutex controlSessionMutex;
         std::unordered_map<std::string, std::shared_ptr<ControlSession>> controlSessions;
+        std::filesystem::path servedDirectory;
 
-        Implementation(boost::asio::any_io_executor executor, std::string publicJwt)
+        Implementation(boost::asio::any_io_executor executor, std::string publicJwt, std::filesystem::path directory)
             : executor{std::move(executor)}
             , publicJwt{std::move(publicJwt)}
             , publishers{}
             , controlSessionMutex{}
             , controlSessions{}
+            , servedDirectory{std::move(directory)}
         {}
     };
     //#####################################################################################################################
-    PageAndControlProvider::PageAndControlProvider(boost::asio::any_io_executor executor, std::string publicJwt)
-        : impl_{std::make_unique<Implementation>(std::move(executor), std::move(publicJwt))}
+    PageAndControlProvider::PageAndControlProvider(
+        boost::asio::any_io_executor executor,
+        std::string publicJwt,
+        std::filesystem::path directory)
+        : impl_{std::make_unique<Implementation>(std::move(executor), std::move(publicJwt), std::move(directory))}
     {}
     //---------------------------------------------------------------------------------------------------------------------
     ROAR_PIMPL_SPECIAL_FUNCTIONS_IMPL(PageAndControlProvider);
     //---------------------------------------------------------------------------------------------------------------------
-    void PageAndControlProvider::index(Session& session, EmptyBodyRequest&& req)
+    Roar::ServeDecision PageAndControlProvider::serve(
+        Roar::Session& /*session*/,
+        Roar::EmptyBodyRequest const& /*request*/,
+        Roar::FileAndStatus const& fileAndStatus,
+        Roar::ServeOptions<PageAndControlProvider>& /*options*/)
     {
-        session.send<string_body>(req)->status(status::ok).contentType("text/plain").body("Hi").commit();
+        spdlog::info("Serving {}", fileAndStatus.file.string());
+        return Roar::ServeDecision::Continue;
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::filesystem::path PageAndControlProvider::getServedDirectory() const
+    {
+        return impl_->servedDirectory;
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void PageAndControlProvider::status(Session& session, EmptyBodyRequest&& req)
+    {
+        session.send<empty_body>(req)->status(status::no_content).commit();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void PageAndControlProvider::redirect1(Session& session, EmptyBodyRequest&& req)
+    {
+        session.send<empty_body>(req)->status(status::moved_permanently).setHeader(field::location, "/").commit();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void PageAndControlProvider::redirect2(Session& session, EmptyBodyRequest&& req)
+    {
+        session.send<empty_body>(req)->status(status::moved_permanently).setHeader(field::location, "/").commit();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void PageAndControlProvider::redirect3(Session& session, EmptyBodyRequest&& req)
+    {
+        session.send<empty_body>(req)->status(status::moved_permanently).setHeader(field::location, "/").commit();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void PageAndControlProvider::publisher(Session& session, EmptyBodyRequest&& req)

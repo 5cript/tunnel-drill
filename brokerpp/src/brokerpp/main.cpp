@@ -1,3 +1,4 @@
+#include <brokerpp/program_options.hpp>
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/controller.hpp>
 #include <brokerpp/load_home_file.hpp>
@@ -12,6 +13,8 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <roar/utility/scope_exit.hpp>
+#include <roar/utility/shutdown_barrier.hpp>
 
 #include <iostream>
 #include <chrono>
@@ -21,10 +24,14 @@
 // FIXME: this might fill up quickly
 constexpr static auto IoContextThreadPoolSize = 8;
 
-int main()
+int main(int argc, char** argv)
 {
     using namespace TunnelBore::Broker;
     using namespace std::string_literals;
+
+    const auto programOptions = parseProgramOptions(argc, argv);
+
+    spdlog::info("Serving documents from: {}", programOptions.servedDirectory);
 
     setupHome();
 
@@ -39,6 +46,11 @@ int main()
              .privateKey = getHomePath() / "key.pem",
          })});
 
+    const auto shutdownPool = Roar::ScopeExit{[&pool]() {
+        pool.stop();
+        pool.join();
+    }};
+
     const auto privateJwt = loadHomeFile("jwt/private.key");
     const auto publicJwt = loadHomeFile("jwt/public.key");
     const auto config = loadConfig();
@@ -46,13 +58,15 @@ int main()
     auto authority = std::make_shared<Authority>(privateJwt);
 
     server.installRequestListener<Authenticator>(authority);
-    server.installRequestListener<PageAndControlProvider>(pool.executor(), publicJwt);
+    server.installRequestListener<PageAndControlProvider>(pool.executor(), publicJwt, programOptions.servedDirectory);
 
     server.start(config.bind.port, config.bind.iface);
 
     // Notify terminal user and wait.
     spdlog::info("Bound on [{}]:'{}'", config.bind.iface, server.getLocalEndpoint().port());
 
-    // TODO: Wait for signal in release mode, enter in debug mode.
-    std::cin.get();
+    // Wait for signal:
+    Roar::shutdownBarrier.wait();
+
+    spdlog::info("Shutting down...");
 }

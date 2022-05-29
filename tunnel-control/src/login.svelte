@@ -10,9 +10,38 @@
 		Button,
 		ButtonToolbar,
 	} from "sveltestrap";
-
+	import { sha512 } from "./utility/hash.js";
 	import { useNavigate } from "svelte-navigator";
+	import { isLoggedIn } from "./stores.js";
+
 	const navigate = useNavigate();
+
+	let email;
+	let password;
+
+	const login = async () => {
+		const hashedPw = await sha512(password);
+		const basic = btoa(`${email}:${hashedPw}`);
+		fetch("/api/auth", {
+			method: "GET",
+			headers: {
+				Authorization: `Basic ${basic}`,
+			},
+		}).then((res) => {
+			console.log(res.status);
+			if (res.status === 200) {
+				res.text().then((token) => {
+					email = "";
+					password = "";
+					localStorage.setItem("sessionToken", token);
+					navigate("/");
+					$isLoggedIn = true;
+				});
+			} else {
+				alert("Invalid credentials");
+			}
+		});
+	};
 </script>
 
 <Card class="login-card">
@@ -21,12 +50,13 @@
 	</CardHeader>
 	<CardBody>
 		<FormGroup>
-			<Label for="email">Email</Label>
+			<Label for="email">Email / Username</Label>
 			<Input
 				type="email"
 				name="email"
 				id="email"
 				placeholder="example@email.org"
+				bind:value={email}
 			/>
 			<Label for="password">Password</Label>
 			<Input
@@ -34,12 +64,13 @@
 				name="password"
 				id="password"
 				placeholder="something long and complex"
+				bind:value={password}
 			/>
 		</FormGroup>
 		<ButtonToolbar class="float-right login-button-toolbar">
 			<Button
 				on:click={() => {
-					navigate("/");
+					login();
 				}}>Login</Button
 			>
 			<Button

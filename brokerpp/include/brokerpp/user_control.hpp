@@ -11,12 +11,13 @@ namespace TunnelBore::Broker
         friend class UserControl;
 
       private:
-        User(std::string identity);
+        User(std::string email, std::string identity);
 
       public:
         std::string identity() const;
 
       private:
+        std::string email_;
         std::string identity_;
     };
 

@@ -7,15 +7,14 @@
 		DropdownMenu,
 		DropdownItem,
 	} from "sveltestrap";
-	import { createEventDispatcher } from "svelte";
-	import { Link } from "svelte-navigator";
+	import { createEventDispatcher, onDestroy } from "svelte";
+	import { useNavigate } from "svelte-navigator";
+	import { isLoggedIn } from "./stores.js";
+	const navigate = useNavigate();
 
 	const dispatch = createEventDispatcher();
 	let class_;
 	export { class_ as class };
-	let user = {
-		loggedIn: false,
-	};
 </script>
 
 <div class={class_}>
@@ -30,14 +29,23 @@
 		<Dropdown>
 			<DropdownToggle nav caret>User Control</DropdownToggle>
 			<DropdownMenu end>
-				{#if user.loggedIn}
+				{#if $isLoggedIn}
 					<DropdownItem>Profile</DropdownItem>
 					<DropdownItem>Publishers</DropdownItem>
 					<DropdownItem divider />
-					<DropdownItem>Sign Out</DropdownItem>
+					<DropdownItem
+						on:click={() => {
+							localStorage.removeItem("sessionToken");
+							$isLoggedIn = false;
+						}}>Sign Out</DropdownItem
+					>
 				{:else}
-					<DropdownItem>
-						<Link to="/login">Sign In</Link>
+					<DropdownItem
+						on:click={() => {
+							navigate("/login");
+						}}
+					>
+						Sign In
 					</DropdownItem>
 				{/if}
 			</DropdownMenu>

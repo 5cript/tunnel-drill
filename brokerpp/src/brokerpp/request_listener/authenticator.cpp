@@ -1,10 +1,10 @@
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/request_listener/authenticator.hpp>
-
 #include <brokerpp/json.hpp>
 
-#include <spdlog/spdlog.h>
+#include <roar/mechanics/cookie.hpp>
 
+#include <spdlog/spdlog.h>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/nlohmann-json/traits.h>
 
@@ -32,7 +32,6 @@ namespace TunnelBore::Broker
                 .commit();
         }
 
-        // FIXME: set cookie?
         return (void)session.send<string_body>(request)
             ->status(status::ok)
             .contentType("application/json")
