@@ -29,7 +29,6 @@ target_link_libraries(
   PRIVATE
     project-settings
     project-warnings
-    special_paths
   PUBLIC
     roar
     attender

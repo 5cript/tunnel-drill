@@ -2,6 +2,7 @@
 	import Topbar from "./topbar.svelte";
 	import Menu from "./menu.svelte";
 	import Login from "./login.svelte";
+	import PublisherSettings from "./publisher_settings.svelte";
 	import { Router, Route } from "svelte-navigator";
 
 	let isMenuOpen = true;
@@ -21,7 +22,7 @@
 			<div class="content">
 				<Route path="/stats/combined">"Stats Combined"</Route>
 				<Route path="/stats/publisher">"Stats Publisher"</Route>
-				<Route path="/settings/publisher">"Settings Publisher"</Route>
+				<Route path="/settings/publisher"><PublisherSettings /></Route>
 			</div>
 		</Route>
 	</Router>

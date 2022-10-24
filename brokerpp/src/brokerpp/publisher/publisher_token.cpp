@@ -5,7 +5,7 @@
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
+    // #####################################################################################################################
     PublisherToken::PublisherToken(std::string identity, json otherClaims)
         : identity_{std::move(identity)}
         , otherClaims_{std::move(otherClaims)}
@@ -20,7 +20,7 @@ namespace TunnelBore::Broker
     {
         return otherClaims_;
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
     std::optional<PublisherToken> verifyPublisherToken(std::string const& tokenData, std::string const& publicJwtKey)
     {
         const auto decoded = jwt::decode<jwt::traits::nlohmann_json>(tokenData);
@@ -33,16 +33,16 @@ namespace TunnelBore::Broker
         if (ec)
             return std::nullopt;
 
-        const auto claims = decoded.get_payload_claims();
+        const auto claims = decoded.get_payload_json();
         auto ident = claims.find("identity");
         if (ident == std::end(claims))
             return std::nullopt;
         json jsonClaims;
         for (auto const& claim : claims)
         {
-            jsonClaims[claim.first] = claim.second.to_json();
+            jsonClaims[claim.first] = claim.second;
         }
-        return PublisherToken{ident->second.as_string(), jsonClaims};
+        return PublisherToken{ident->second.get<std::string>(), jsonClaims};
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

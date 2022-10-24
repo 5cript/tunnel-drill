@@ -10,9 +10,9 @@
 		Button,
 		ButtonToolbar,
 	} from "sveltestrap";
-	import { sha512 } from "./utility/hash.js";
+	import { sha512 } from "./utility/hash";
 	import { useNavigate } from "svelte-navigator";
-	import { isLoggedIn } from "./stores.js";
+	import { setSession } from "./session";
 
 	const navigate = useNavigate();
 
@@ -33,9 +33,8 @@
 				res.text().then((token) => {
 					email = "";
 					password = "";
-					localStorage.setItem("sessionToken", token);
+					setSession(token);
 					navigate("/");
-					$isLoggedIn = true;
 				});
 			} else {
 				alert("Invalid credentials");
