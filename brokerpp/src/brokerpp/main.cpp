@@ -39,12 +39,13 @@ int main(int argc, char** argv)
 
     spdlog::info("Config files are at '{}'", getHomePath().string());
 
-    Roar::Server server(
-        {.executor = pool.executor(),
-         .sslContext = Roar::makeSslContext({
-             .certificate = getHomePath() / "cert.pem",
-             .privateKey = getHomePath() / "key.pem",
-         })});
+    Roar::Server server({
+        .executor = pool.executor(),
+        .sslContext = Roar::makeSslContext({
+            .certificate = getHomePath() / "cert.pem",
+            .privateKey = getHomePath() / "key.pem",
+        })
+    });
 
     const auto shutdownPool = Roar::ScopeExit{[&pool]() {
         pool.stop();

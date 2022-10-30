@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include <iterator>
+#include <iostream>
 
 namespace TunnelBore::Broker
 {
@@ -248,6 +249,7 @@ namespace TunnelBore::Broker
                  doPipe = std::move(doPipe)](auto const& ec, std::size_t bytesTransferred) {
                     if (ec)
                     {
+                        std::cout << ec << " (" << (self->impl_->isPublisherSide ? "publisher side" : "client side") << ")\n";
                         self->close();
                         return;
                     }

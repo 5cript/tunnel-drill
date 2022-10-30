@@ -4,6 +4,7 @@
 #include <brokerpp/publisher/publisher.hpp>
 #include <brokerpp/publisher/publisher_token.hpp>
 
+#include <roar/utility/base64.hpp>
 #include <jwt-cpp/jwt.h>
 #include <jwt-cpp/traits/nlohmann-json/traits.h>
 #include <spdlog/spdlog.h>
@@ -93,15 +94,15 @@ namespace TunnelBore::Broker
         if (!tokenData)
             return closeWithFailure("Missing bearer auth.");
 
-        auto token = verifyPublisherToken(*tokenData, impl_->publicJwt);
+        auto token = verifyPublisherToken(Roar::base64Decode(*tokenData), impl_->publicJwt);
         if (!token)
             return closeWithFailure("Token was rejected.");
 
-        // session.setup(ident->second.to_json().get<std::string>());
-
+        spdlog::info("Upgrading to WebSocket session");
         session.upgrade(req)
             .then([weak = weak_from_this(), identity = token->identity()](std::shared_ptr<WebsocketSession> ws) {
                 // TODO:
+                spdlog::info("Upgrade complete");
                 auto self = weak.lock();
                 if (!self)
                     return;
