@@ -3,6 +3,7 @@ import RetryContext from "../../util/retry";
 import { ServiceInfo } from '../../shared/service';
 import { NewTunnelMessage, NewTunnelFailedMessage } from "../../shared/control_messages/new_tunnel";
 import https from 'https';
+import http from 'http';
 import { generateUuid } from "../../broker/src/util/id";
 import TcpSession from "./tcp_session";
 import UdpSession from "./udp_session";
@@ -102,8 +103,7 @@ class Publisher
     config: Config;
 
     constructor(wsPath: string, config: Config) {
-        // FIXME: something better, needs to be solved with authentication later:
-        this.identity = generateUuid();
+        this.identity = config.identity;
         this.brokerHost = config.host;
         this.services = {};
         this.messageMap = {};

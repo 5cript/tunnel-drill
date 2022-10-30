@@ -14,10 +14,8 @@ const configureLogger = (logFile: string) =>
     });
 
     let logOutputs = [];
-    if (isDev())
-        logOutputs.push(new winston.transports.Console());
-    else
-        logOutputs.push(new winston.transports.File({filename: logFile}));
+    logOutputs.push(new winston.transports.Console());
+    logOutputs.push(new winston.transports.File({filename: logFile}));
     
     winston.configure({
         format: combine(

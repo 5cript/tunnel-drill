@@ -18,13 +18,19 @@ const main = () => {
     if (isDev())
         configPath = pathTools.join(publisherHome, 'configDev.json');
 
-    const config = JSON.parse(
-        fs.readFileSync(configPath, {encoding: 'utf-8'})
-    ) as Config;
-    const publisher = new Publisher(
-        "wss://" + config.host + ':' + config.port + "/api/ws/publisher", 
-        config
-    );
+    let publisher: Publisher;
+    try {
+        const config = JSON.parse(
+            fs.readFileSync(configPath, {encoding: 'utf-8'})
+        ) as Config;
+        winston.error("Config: ", config);
+        publisher = new Publisher(
+            "wss://" + config.host + ':' + config.port + "/api/ws/publisher", 
+            config
+        );
+    } catch (e) {
+        winston.error("Failed to load config file and create publisher: " + e);
+    }
 
     let end = false;
     process.on('SIGINT', () => {
