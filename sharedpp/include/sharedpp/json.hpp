@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <memory>
 
 using json = nlohmann::json;
 
@@ -23,6 +24,23 @@ namespace nlohmann
             v = std::nullopt;
         else
             v = j.get<T>();
+    }
+
+    template <class T>
+    void to_json(nlohmann::json& j, const std::shared_ptr<T>& v)
+    {
+        if (v)
+            j = *v;
+        else
+            j = nullptr;
+    }
+
+    template <class T>
+    void from_json(const nlohmann::json& j, std::shared_ptr<T>& v)
+    {
+        v = std::make_shared<T>();
+        for (auto& e : j)
+            v->push_back(e.get<T>());
     }
 } // namespace nlohmann
 

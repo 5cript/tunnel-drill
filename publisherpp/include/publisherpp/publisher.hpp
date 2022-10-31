@@ -51,7 +51,7 @@ namespace TunnelBore::Publisher
       private:
         Config cfg_;
         std::shared_ptr<Roar::WebsocketClient> ws_;
-        std::vector<Service> services_;
+        std::vector<std::shared_ptr<Service>> services_;
         std::string authToken_;
         std::chrono::system_clock::time_point tokenCreationTime_;
         std::recursive_mutex controlSendQueueMutex_;

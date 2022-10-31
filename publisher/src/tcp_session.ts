@@ -2,8 +2,7 @@ import net from 'net';
 import SharedConstants from '../../shared/shared_constants';
 import winston from 'winston';
 
-class TcpSession
-{
+class TcpSession {
     public static readonly localConnectTimeout = 3000;
 
     remoteSocket: net.Socket;
@@ -12,18 +11,19 @@ class TcpSession
     hiddenPort: number;
     hiddenHost: string;
     remotePort: number;
+    total: number;
     onAnyClose: () => void;
 
-    constructor(publicPort: number, hiddenPort: number, brokerHost: string, token: string, onAnyClose: () => void, hiddenHost?: string) 
-    {
+    constructor(publicPort: number, hiddenPort: number, brokerHost: string, token: string, onAnyClose: () => void, hiddenHost?: string) {
         this.anyCloseWasCalled = false;
         this.hiddenPort = hiddenPort;
         this.remotePort = publicPort;
         this.hiddenHost = hiddenHost ? hiddenHost : "localhost";
+        this.total = 0;
 
         this.onAnyClose = () => {
-            if (!this.anyCloseWasCalled)
-            {
+            console.log(this.total);
+            if (!this.anyCloseWasCalled) {
                 this.anyCloseWasCalled = true;
                 onAnyClose();
             }
@@ -38,17 +38,19 @@ class TcpSession
             host: this.hiddenHost,
             port: this.hiddenPort
         });
+        this.localSocket.pause();
         this.localSocket.on('error', (error) => {
             winston.error(`Error with local socket for service with local port ${this.hiddenPort}: ${error.message}`);
         })
         this.localSocket.on('close', () => {
+            winston.info('LocalClose');
             // FIXME: improveMe
             setTimeout(() => {
                 this.remoteSocket?.end();
                 this.remoteSocket?.destroy();
                 this.remoteSocket?.unref();
                 this.onAnyClose();
-            }, 1000) // 1 sec to write stuff.
+            }, 8000) // 1 sec to write stuff.
         })
         this.localSocket.on('connect', () => {
             winston.info(`Both ends are open, starting to pipe between broker at ${this.remotePort} and service at ${this.hiddenPort}`);
@@ -60,6 +62,7 @@ class TcpSession
             // })
             this.localSocket.pipe(this.remoteSocket);
             this.remoteSocket.pipe(this.localSocket);
+            this.localSocket.resume();
             this.remoteSocket.resume();
         })
     }
@@ -75,12 +78,13 @@ class TcpSession
             winston.error(`Error with remote socket for service with local port ${this.hiddenPort}: ${error.message}`);
         })
         this.remoteSocket.on('close', () => {
+            winston.info('RemoteClose');
             setTimeout(() => {
                 this.localSocket?.end();
                 this.localSocket?.destroy();
                 this.localSocket?.unref();
                 this.onAnyClose();
-            }, 1000)
+            }, 8000)
         });
         this.remoteSocket.on('connect', () => {
             this.remoteSocket.write(token, 'utf-8', () => {
