@@ -33,7 +33,8 @@ int main()
     publisher->authenticate();
 
     // Wait for signal:
-    Roar::shutdownBarrier.wait();
+    //Roar::shutdownBarrier.wait();
+    std::cin.get();
 
     spdlog::info("Shutting down...");
 }

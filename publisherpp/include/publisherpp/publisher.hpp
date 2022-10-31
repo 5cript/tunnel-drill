@@ -6,6 +6,7 @@
 #include <roar/websocket/read_result.hpp>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/deadline_timer.hpp>
 
 #include <chrono>
 #include <string>
@@ -54,6 +55,14 @@ namespace TunnelBore::Publisher
         std::vector<std::shared_ptr<Service>> services_;
         std::string authToken_;
         std::chrono::system_clock::time_point tokenCreationTime_;
+        
+        // reconnect related
+        boost::asio::deadline_timer reconnectTimer_;
+        std::chrono::seconds reconnectTime_;
+        bool isReconnecting_;
+        std::recursive_mutex reconnectMutex_;
+
+        // send queue related
         std::recursive_mutex controlSendQueueMutex_;
         std::deque<ControlSendOperation> controlSendOperations_;
         bool sendInProgress_;

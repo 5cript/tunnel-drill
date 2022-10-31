@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 namespace TunnelBore::Publisher
 {
@@ -42,6 +43,13 @@ namespace TunnelBore::Publisher
         }()}
         , authToken_{}
         , tokenCreationTime_{}
+        , reconnectTimer_{exec}
+        , reconnectTime_{1}
+        , isReconnecting_{false}
+        , reconnectMutex_{}
+        , controlSendQueueMutex_{}
+        , controlSendOperations_{}
+        , sendInProgress_{false}
     {}
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::authenticate()
@@ -57,7 +65,7 @@ namespace TunnelBore::Publisher
         if (response.code() != boost::beast::http::status::ok)
         {
             spdlog::error("Failed to authenticate with the authority. Response code: {}", static_cast<int>(response.code()));
-            // TODO: reconnect.
+            retryConnect();
             return;
         }
         spdlog::info("Authentication successful");
@@ -69,7 +77,28 @@ namespace TunnelBore::Publisher
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::retryConnect()
     {
-        // TODO:
+        std::scoped_lock lock{reconnectMutex_};
+        if (isReconnecting_)
+            return;
+        spdlog::info("Retrying connection in {} seconds", reconnectTime_.count());
+        isReconnecting_ = true;
+        reconnectTimer_.expires_from_now(boost::posix_time::seconds(reconnectTime_.count()));
+        reconnectTime_ *= 2;
+        if (reconnectTime_.count() > 60)
+            reconnectTime_ = 60s;
+        reconnectTimer_.async_wait([weak = weak_from_this()](boost::system::error_code ec) {
+            if (ec)
+                return;
+            auto self = weak.lock();
+            if (!self)
+                return;
+            
+            std::scoped_lock lock{self->reconnectMutex_};
+            self->isReconnecting_ = false;
+            self->authenticate();
+        });
+        
+        connectToBroker();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::connectToBroker()
@@ -91,6 +120,10 @@ namespace TunnelBore::Publisher
                     return;
 
                 spdlog::info("Connected to broker control line");
+                {
+                    std::scoped_lock lock{self->reconnectMutex_};
+                    self->reconnectTime_ = 1s;
+                }
                 self->doControlReading();
                 json handshake = {
                     {"type", "Handshake"}, {"identity", self->cfg_.identity}, {"services", self->services_}};
@@ -112,8 +145,12 @@ namespace TunnelBore::Publisher
                 self->onControlRead(std::move(msg));
                 self->doControlReading();
             })
-            .fail([](auto const& err) {
+            .fail([weak = weak_from_this()](auto const& err) {
                 spdlog::error("Failed to read from broker: '{}'", err.toString());
+                auto self = weak.lock();
+                if (!self)
+                    return;
+                self->retryConnect();
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
