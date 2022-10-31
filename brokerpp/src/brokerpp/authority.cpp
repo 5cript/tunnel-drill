@@ -28,7 +28,7 @@ namespace TunnelBore::Broker
                          .set_issuer("tunnelBore")
                          .set_type("JWS")
                          .set_issued_at(std::chrono::system_clock::now())
-                         .set_expires_at(std::chrono::system_clock::now() + std::chrono::days{1})
+                         .set_expires_at(std::chrono::system_clock::now() + std::chrono::days{365})
                          .set_payload_claim("identity", user->identity());
         for (auto const& claim : claims.items())
         {
