@@ -30,10 +30,7 @@ namespace TunnelBore::Broker
         ControlSession& operator=(ControlSession const&) = delete;
         std::optional<PublisherToken> verifyPublisherIdentity(std::string const& token) const;
 
-        Roar::Detail::PromiseTypeBind<
-            Roar::Detail::PromiseTypeBindThen<std::size_t>,
-            Roar::Detail::PromiseTypeBindFail<Roar::Error const&>>
-        writeJson(json const& j);
+        void writeJson(json const& j);
         std::string identity() const;
 
         // TODO: still right approach?
@@ -51,6 +48,7 @@ namespace TunnelBore::Broker
         void doRead();
         void onJson(json const& j, std::string const& ref);
         std::shared_ptr<Publisher> getAssociatedPublisher();
+        void writeOnce();
 
       private:
         struct Implementation;

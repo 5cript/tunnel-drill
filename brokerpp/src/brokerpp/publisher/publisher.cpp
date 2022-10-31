@@ -106,16 +106,21 @@ namespace TunnelBore::Broker
         };
 
         std::scoped_lock lock{impl_->serviceGuard};
+        std::vector <std::string> recreatedServices;
         for (auto const& [serviceId, service] : impl_->services)
         {
             if (serviceInfo.publicPort == service->info().publicPort)
             {
                 // TODO: This does not change service config changes. How to handle this?
                 spdlog::info(
-                    "Service for '{}' with public port '{}' already exists.", impl_->identity, serviceInfo.publicPort);
+                    "Service for '{}' with public port '{}' already existed, recreate.", impl_->identity, serviceInfo.publicPort);
+                recreatedServices.push_back(serviceId);
                 return returnResult(true);
             }
         }
+
+        for (auto const& serviceId : recreatedServices)
+            impl_->services.erase(serviceId);
 
         const auto serviceId = impl_->uuidGenerator.generate_id();
         auto service = std::make_shared<Service>(

@@ -8,7 +8,7 @@ IS_MSYS2_CLANG=off
 COMPILER=clang++
 CCOMPILER=clang
 LINKER=lld
-THREADS=1
+THREADS=8
 BUILD_TYPE=Debug
 
 while getopts b:j: opts; do

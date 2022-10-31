@@ -33,6 +33,9 @@ namespace TunnelBore::Broker
         void link(TunnelSession& other);
         void peek();
         void pipeTo(TunnelSession& other);
+        boost::asio::ip::tcp::socket& socket();
+        std::string id() const;
+        std::string remoteAddress() const;
 
         void resetTimer();
 

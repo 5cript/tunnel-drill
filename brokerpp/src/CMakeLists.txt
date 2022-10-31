@@ -12,6 +12,7 @@ add_library(broker-lib STATIC
   brokerpp/publisher/service.cpp
   brokerpp/publisher/tunnel_session.cpp
   brokerpp/publisher/publisher_token.cpp
+  brokerpp/publisher/pipe_operation.cpp
   brokerpp/request_listener/authenticator.cpp
   brokerpp/request_listener/page_control_provider.cpp
 )

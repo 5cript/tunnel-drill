@@ -10,9 +10,19 @@
 #include <spdlog/spdlog.h>
 
 #include <string>
+#include <deque>
+#include <mutex>
 
 namespace TunnelBore::Broker
 {
+    //#####################################################################################################################
+    namespace 
+    {
+        struct WriteOperation
+        {
+            json payload;
+        };
+    }
     //#####################################################################################################################
     struct ControlSession::Implementation
     {
@@ -28,6 +38,10 @@ namespace TunnelBore::Broker
         std::string publicJwtKey;
 
         std::vector<std::shared_ptr<Subscription>> subscriptions;
+
+        std::recursive_mutex writeGuard;
+        std::deque<WriteOperation> pendingMessages;
+        bool writeInProgress;
 
         Implementation(
             std::string sessionId,
@@ -54,6 +68,9 @@ namespace TunnelBore::Broker
         , endSelf{std::move(endSelf)}
         , publicJwtKey{std::move(publicJwtKey)}
         , subscriptions{}
+        , writeGuard{}
+        , pendingMessages{}
+        , writeInProgress{false}
     {}
     //#####################################################################################################################
     ControlSession::ControlSession(
@@ -113,7 +130,10 @@ namespace TunnelBore::Broker
         auto publisher = getAssociatedPublisher();
         auto service = publisher->getService(serviceId);
         if (!service)
+        {
+            spdlog::error("Service with id '{}' not found", serviceId);
             return; // TODO: handle error
+        }
 
         auto serviceInfo = service->info();
 
@@ -200,26 +220,48 @@ namespace TunnelBore::Broker
         return impl_->remoteEndpoint;
     }
     //---------------------------------------------------------------------------------------------------------------------
-    Roar::Detail::PromiseTypeBind<
-        Roar::Detail::PromiseTypeBindThen<std::size_t>,
-        Roar::Detail::PromiseTypeBindFail<Roar::Error const&>>
-    ControlSession::writeJson(json const& j)
+    void ControlSession::writeOnce()
     {
-        return promise::newPromise([this, &j](promise::Defer d) {
-            impl_->ws->send(j.dump())
-                .then([d](std::size_t amount) {
-                    d.resolve(amount);
-                })
-                .fail([d, weak = weak_from_this()](Roar::Error const& error) {
-                    auto self = weak.lock();
-                    if (!self)
-                        return d.reject(error);
+        std::scoped_lock writeLock{impl_->writeGuard};
+        if (impl_->pendingMessages.empty())
+        {
+            impl_->writeInProgress = false;
+            return;
+        }
+        impl_->writeInProgress = true;
 
-                    spdlog::error("Failed to send message: {}", error.toString());
-                    self->impl_->endSelf();
-                    d.reject(error);
-                });
-        });
+        auto& msg = impl_->pendingMessages.front();
+        const auto payloadString = msg.payload.dump();
+        spdlog::info("Writing message to control session: '{}'", payloadString.substr(0, std::min(payloadString.size(), 100ul)));
+
+        impl_->ws->send(payloadString)
+            .then([weak = weak_from_this()](std::size_t) {
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
+                self->writeOnce();
+            })
+            .fail([weak = weak_from_this()](Roar::Error const& error) {
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
+                spdlog::error("Failed to send message: {}", error.toString());
+                self->impl_->endSelf();
+                self->writeOnce();
+            });
+
+        impl_->pendingMessages.pop_front();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::writeJson(json const& j)
+    {
+        std::scoped_lock writeLock{impl_->writeGuard};
+        impl_->pendingMessages.push_back({j});
+
+        if (!impl_->writeInProgress)
+            writeOnce();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::subscribe(
