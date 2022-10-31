@@ -129,8 +129,12 @@ namespace TunnelBore::Publisher
                     {"type", "Handshake"}, {"identity", self->cfg_.identity}, {"services", self->services_}};
                 self->sendQueued(std::move(handshake));
             })
-            .fail([](auto&& err) {
+            .fail([weak = weak_from_this()](auto&& err) {
                 spdlog::error("Failed to connect to broker: {}", err.toString());
+                auto self = weak.lock();
+                if (!self)
+                    return;
+                self->retryConnect(); 
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -179,7 +183,6 @@ namespace TunnelBore::Publisher
             })
             .fail([](auto const& err) {
                 spdlog::error("Failed to send to broker: '{}'", err.toString());
-                // TODO: Am i still connected? If not reconnect?
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -208,6 +211,12 @@ namespace TunnelBore::Publisher
         else if (type == "Error")
         {
             spdlog::error("Received Error message from broker: {}", j.dump());
+        }
+        else if (type == "ServiceStartResult")
+        {
+            const auto result = j["result"].get<bool>();
+            if (!result)
+                spdlog::error("Failed to start service: {}", j.dump());
         }
         else
         {

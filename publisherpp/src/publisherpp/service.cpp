@@ -54,7 +54,13 @@ namespace TunnelBore::Publisher
 
             // create socket synchronously
             auto socket = boost::asio::ip::tcp::socket{self->executor_};
-            boost::asio::connect(socket, endpoints);
+            boost::system::error_code ec;
+            boost::asio::connect(socket, endpoints, ec);
+            if (ec) 
+            {
+                spdlog::error("Service::createSession: connect failed: {}", ec.message());
+                return std::shared_ptr<ServiceSession>{};
+            }
 
             // create session
             auto session = std::make_shared<ServiceSession>(std::move(socket));
@@ -79,6 +85,8 @@ namespace TunnelBore::Publisher
 
         auto prefixedToken = std::make_shared<std::string>(std::string{publisherToBrokerPrefix} + ":" + token);
         auto outwards = createConnection(brokerHost, publicPort_);
+        if (!outwards)
+            return;
         // write token to outwards:
         boost::asio::async_write(
             outwards->socket(),
@@ -98,6 +106,11 @@ namespace TunnelBore::Publisher
                 }
 
                 auto inwards = createConnection(self->hiddenHost_, self->hiddenPort_);
+                if (!inwards)
+                {
+                    outwards->close();
+                    return;
+                }
                 self->sessions_.emplace(tunnelId, ServiceSessionPair{inwards, outwards});
                 inwards->pipeTo(*outwards);
                 outwards->pipeTo(*inwards);

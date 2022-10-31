@@ -144,8 +144,9 @@ namespace TunnelBore::Broker
                 if (ec)
                 {
                     spdlog::warn(
-                        "Initial read for tunnel side failed, this will terminate this side of the tunnel '{}'.",
-                        self->impl_->remoteAddress);
+                        "Initial read for tunnel side failed, this will terminate this side of the tunnel '{}': '{}'",
+                        self->impl_->remoteAddress,
+                        ec.message());
                     self->close();
                     return;
                 }
@@ -154,7 +155,7 @@ namespace TunnelBore::Broker
                 if (!controlSession)
                 {
                     spdlog::warn(
-                        "Missing control session for new session, this will terminate this tunnel '{}'.",
+                        "Missing control session for new session, this will terminate this tunnel '{}'",
                         self->impl_->remoteAddress);
                     self->close();
                     return;
