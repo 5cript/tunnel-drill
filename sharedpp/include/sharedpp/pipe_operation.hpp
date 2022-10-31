@@ -16,7 +16,7 @@ namespace TunnelBore
         PipeOperation(std::weak_ptr<TunnelSession> sideOriginal, std::weak_ptr<TunnelSession> sideOther)
             : sideOriginal_(sideOriginal)
             , sideOther_(sideOther)
-            , buffer_(65536, '\0')
+            , buffer_(4096, '\0')
             , totalTransfer_{0}
         {}
         ~PipeOperation()

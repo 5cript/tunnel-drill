@@ -20,7 +20,7 @@ namespace TunnelBore::Broker
     {
         struct WriteOperation
         {
-            json payload;
+            std::string payload;
         };
     }
     // #####################################################################################################################
@@ -106,7 +106,7 @@ namespace TunnelBore::Broker
                     [&e](auto&& arg) {
                         if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, boost::system::error_code>)
                         {
-                            if (arg.value() == boost::asio::error::eof)
+                            if (arg.value() == boost::asio::ssl::error::stream_errors::stream_truncated)
                                 return;
                         }
                         spdlog::error("Control session read failed: {}", e.toString());
@@ -240,12 +240,11 @@ namespace TunnelBore::Broker
         impl_->writeInProgress = true;
 
         auto& msg = impl_->pendingMessages.front();
-        const auto payloadString = msg.payload.dump();
         spdlog::info(
             "Writing message to control session: '{}'",
-            payloadString.substr(0, std::min(payloadString.size(), static_cast<std::size_t>(100))));
+            msg.payload.substr(0, std::min(msg.payload.size(), static_cast<std::size_t>(100))));
 
-        impl_->ws->send(payloadString)
+        impl_->ws->send(msg.payload)
             .then([weak = weak_from_this()](std::size_t) {
                 auto self = weak.lock();
                 if (!self)
@@ -269,7 +268,7 @@ namespace TunnelBore::Broker
     void ControlSession::writeJson(json const& j)
     {
         std::scoped_lock writeLock{impl_->writeGuard};
-        impl_->pendingMessages.push_back({j});
+        impl_->pendingMessages.push_back({j.dump()});
 
         if (!impl_->writeInProgress)
             writeOnce();
