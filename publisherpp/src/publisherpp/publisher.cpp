@@ -28,15 +28,15 @@ namespace TunnelBore::Publisher
                   }(),
           })}
         , services_{[this, &exec]() {
-            std::vector<Service> services;
+            std::vector<std::shared_ptr<Service>> services;
             for (auto const& serviceInfo : cfg_.services)
             {
-                services.push_back(Service{
+                services.push_back(std::make_shared<Service>(
                     exec,
                     serviceInfo.name,
                     serviceInfo.publicPort,
                     serviceInfo.hiddenHost ? *serviceInfo.hiddenHost : "localhost",
-                    serviceInfo.hiddenPort});
+                    serviceInfo.hiddenPort));
             }
             return services;
         }()}
@@ -196,7 +196,7 @@ namespace TunnelBore::Publisher
         };
 
         auto service = std::find_if(services_.begin(), services_.end(), [&](auto const& service) {
-            return service.hiddenPort() == hiddenPort && service.publicPort() == publicPort;
+            return service->hiddenPort() == hiddenPort && service->publicPort() == publicPort;
         });
         if (service == services_.end())
         {
@@ -228,7 +228,7 @@ namespace TunnelBore::Publisher
             return;
         }
         const auto tunnelToken = json::parse(body)["token"].get<std::string>();
-        service->createSession(cfg_.host, tunnelToken, tunnelId);
+        (*service)->createSession(cfg_.host, tunnelToken, tunnelId);
     }
     //---------------------------------------------------------------------------------------------------------------------
     Publisher::~Publisher()
