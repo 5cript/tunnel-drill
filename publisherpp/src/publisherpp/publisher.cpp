@@ -17,10 +17,15 @@ namespace TunnelBore::Publisher
         : cfg_{std::move(cfg)}
         , ws_{{
               .executor = exec,
-              .sslContext = Roar::makeSslContext(Roar::SslContextCreationParameters{
-                  .certificate = std::string_view{""},
-                  .privateKey = std::string_view{""},
-              }),
+              .sslContext =
+                  [] {
+                      boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
+                      sslContext.set_verify_mode(boost::asio::ssl::verify_none);
+                      sslContext.set_options(
+                          boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::no_sslv2 |
+                          boost::asio::ssl::context::single_dh_use);
+                      return sslContext;
+                  }(),
           }}
         , services_{[this, &exec]() {
             std::vector<Service> services;
@@ -51,6 +56,7 @@ namespace TunnelBore::Publisher
 
         if (response.code() != boost::beast::http::status::ok)
             throw std::runtime_error{"Authentication failed"};
+        spdlog::info("Authentication successful");
 
         tokenCreationTime_ = std::chrono::system_clock::now();
 
@@ -64,19 +70,27 @@ namespace TunnelBore::Publisher
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::connectToBroker()
     {
+        spdlog::info("Connecting to broker control line '{}:{}'", cfg_.host, cfg_.port);
         ws_.connect({
                         .host = cfg_.host,
                         .port = std::to_string(cfg_.port),
                         .path = "/api/ws/publisher",
+                        .timeout = std::chrono::seconds{5},
                         .headers = {{
                             boost::beast::http::field::authorization,
                             "Bearer "s + Roar::base64Encode(authToken_),
                         }},
                     })
-            .then([this]() {
-                doControlReading();
-                json handshake = {{"type", "Handshake"}, {"identity", cfg_.identity}, {"services", services_}};
-                sendQueued(std::move(handshake));
+            .then([weak = weak_from_this()]() {
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
+                spdlog::info("Connected to broker control line");
+                self->doControlReading();
+                json handshake = {
+                    {"type", "Handshake"}, {"identity", self->cfg_.identity}, {"services", self->services_}};
+                self->sendQueued(std::move(handshake));
             })
             .fail([](auto&& err) {
                 spdlog::error("Failed to connect to broker: {}", err.toString());

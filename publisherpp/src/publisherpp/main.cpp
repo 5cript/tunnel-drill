@@ -30,6 +30,7 @@ int main()
 
     const auto config = loadConfig();
     auto publisher = std::make_shared<class Publisher>(pool.executor(), config);
+    publisher->authenticate();
 
     // Wait for signal:
     Roar::shutdownBarrier.wait();

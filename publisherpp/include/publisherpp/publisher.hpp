@@ -32,8 +32,9 @@ namespace TunnelBore::Publisher
         Publisher(Publisher&&) = delete;
         Publisher& operator=(Publisher&&) = delete;
 
-      private:
         void authenticate();
+
+      private:
         void connectToBroker();
         void retryConnect();
         void doControlReading();

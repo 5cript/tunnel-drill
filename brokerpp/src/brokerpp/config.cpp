@@ -14,12 +14,12 @@ namespace TunnelBore::Broker
 
     Config loadConfig()
     {
-        const auto configString = loadHomeFile(detail::inDev ? "configDev.json" : "config.json");
+        const auto configString = loadHomeFile(detail::inDev ? "broker/configDev.json" : "broker/config.json");
         return json::parse(configString).get<Config>();
     }
     void saveConfig(Config const& config)
     {
-        saveHomeFile(detail::inDev ? "configDev.json" : "config.json", json{config}.dump());
+        saveHomeFile(detail::inDev ? "broker/configDev.json" : "broker/config.json", json{config}.dump());
     }
 
 }
