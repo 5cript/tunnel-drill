@@ -50,7 +50,7 @@ namespace TunnelBore::Publisher
 
       private:
         Config cfg_;
-        Roar::WebsocketClient ws_;
+        std::shared_ptr<Roar::WebsocketClient> ws_;
         std::vector<Service> services_;
         std::string authToken_;
         std::chrono::system_clock::time_point tokenCreationTime_;

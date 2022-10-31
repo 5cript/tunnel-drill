@@ -15,7 +15,7 @@ namespace TunnelBore::Publisher
     // #####################################################################################################################
     Publisher::Publisher(boost::asio::any_io_executor exec, Config cfg)
         : cfg_{std::move(cfg)}
-        , ws_{{
+        , ws_{std::make_shared<Roar::WebsocketClient>(Roar::WebsocketClient::ConstructionArguments{
               .executor = exec,
               .sslContext =
                   [] {
@@ -26,7 +26,7 @@ namespace TunnelBore::Publisher
                           boost::asio::ssl::context::single_dh_use);
                       return sslContext;
                   }(),
-          }}
+          })}
         , services_{[this, &exec]() {
             std::vector<Service> services;
             for (auto const& serviceInfo : cfg_.services)
@@ -71,16 +71,16 @@ namespace TunnelBore::Publisher
     void Publisher::connectToBroker()
     {
         spdlog::info("Connecting to broker control line '{}:{}'", cfg_.host, cfg_.port);
-        ws_.connect({
-                        .host = cfg_.host,
-                        .port = std::to_string(cfg_.port),
-                        .path = "/api/ws/publisher",
-                        .timeout = std::chrono::seconds{5},
-                        .headers = {{
-                            boost::beast::http::field::authorization,
-                            "Bearer "s + Roar::base64Encode(authToken_),
-                        }},
-                    })
+        ws_->connect({
+                         .host = cfg_.host,
+                         .port = std::to_string(cfg_.port),
+                         .path = "/api/ws/publisher",
+                         .timeout = std::chrono::seconds{5},
+                         .headers = {{
+                             boost::beast::http::field::authorization,
+                             "Bearer "s + Roar::base64Encode(authToken_),
+                         }},
+                     })
             .then([weak = weak_from_this()]() {
                 auto self = weak.lock();
                 if (!self)
@@ -99,7 +99,7 @@ namespace TunnelBore::Publisher
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::doControlReading()
     {
-        ws_.read()
+        ws_->read()
             .then([weak = weak_from_this()](auto msg) {
                 auto self = weak.lock();
                 if (!self)
@@ -126,7 +126,7 @@ namespace TunnelBore::Publisher
         auto op = std::move(controlSendOperations_.front());
         controlSendOperations_.pop_front();
 
-        ws_.send(op.payload.dump())
+        ws_->send(op.payload.dump())
             .then([cb = std::move(op.callback), weak = weak_from_this()](auto&&) {
                 cb();
 
