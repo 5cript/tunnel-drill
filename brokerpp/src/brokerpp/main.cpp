@@ -46,8 +46,8 @@ int main(int argc, char** argv)
     Roar::Server server(
         {.executor = pool.executor(),
          .sslContext = Roar::makeSslContext({
-             .certificate = getHomePath() / "cert.pem",
-             .privateKey = getHomePath() / "key.pem",
+             .certificate = getHomePath() / "broker/cert.pem",
+             .privateKey = getHomePath() / "broker/key.pem",
          })});
 
     const auto privateJwt = loadHomeFile("broker/jwt/private.key");
