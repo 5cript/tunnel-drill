@@ -3,6 +3,7 @@
 #include <brokerpp/control/control_session.hpp>
 #include <sharedpp/json.hpp>
 #include <sharedpp/pipe_operation.hpp>
+#include <sharedpp/constants.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -13,8 +14,6 @@ namespace TunnelBore::Broker
 {
     namespace
     {
-        constexpr std::string_view publisherToBrokerPrefix = "TUNNEL_BORE_P2B";
-
         struct PublisherConnectionMessage
         {
             std::string identity;
