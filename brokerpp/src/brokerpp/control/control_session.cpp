@@ -102,7 +102,16 @@ namespace TunnelBore::Broker
                 if (!self)
                     return;
 
-                spdlog::error("Control session read failed: {}", e.toString());
+                std::visit(
+                    [&e](auto&& arg) {
+                        if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, boost::system::error_code>)
+                        {
+                            if (arg.value() == boost::asio::error::eof)
+                                return;
+                        }
+                        spdlog::error("Control session read failed: {}", e.toString());
+                    },
+                    e.error);
                 self->impl_->endSelf();
             });
     }
