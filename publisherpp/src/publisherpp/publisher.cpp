@@ -55,7 +55,11 @@ namespace TunnelBore::Publisher
                 .get("https://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
 
         if (response.code() != boost::beast::http::status::ok)
-            throw std::runtime_error{"Authentication failed"};
+        {
+            spdlog::error("Failed to authenticate with the authority. Response code: {}", static_cast<int>(response.code()));
+            // TODO: reconnect.
+            return;
+        }
         spdlog::info("Authentication successful");
 
         tokenCreationTime_ = std::chrono::system_clock::now();

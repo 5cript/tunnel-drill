@@ -1,5 +1,7 @@
 #include <publisherpp/service.hpp>
 
+#include <sharedpp/constants.hpp>
+
 #include <boost/asio.hpp>
 #include <spdlog/spdlog.h>
 
@@ -74,12 +76,14 @@ namespace TunnelBore::Publisher
             return session;
         };
 
+
+        auto prefixedToken = std::make_shared<std::string>(std::string{publisherToBrokerPrefix} + ":" + token);
         auto outwards = createConnection(brokerHost, publicPort_);
         // write token to outwards:
         boost::asio::async_write(
             outwards->socket(),
-            boost::asio::buffer(token),
-            [weak = weak_from_this(), outwards, tunnelId, createConnection](boost::system::error_code ec, std::size_t) {
+            boost::asio::buffer(*prefixedToken),
+            [weak = weak_from_this(), outwards, tunnelId, createConnection, prefixedToken](boost::system::error_code ec, std::size_t) {
                 if (ec)
                 {
                     spdlog::error("Failed to write token to outwards connection: {}", ec.message());
