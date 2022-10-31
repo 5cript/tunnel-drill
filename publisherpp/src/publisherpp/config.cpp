@@ -1,7 +1,7 @@
-#include <brokerpp/config.hpp>
+#include <publisherpp/config.hpp>
 #include <sharedpp/load_home_file.hpp>
 
-namespace TunnelBore::Broker
+namespace TunnelBore::Publisher
 {
     namespace detail
     {
@@ -14,12 +14,11 @@ namespace TunnelBore::Broker
 
     Config loadConfig()
     {
-        const auto configString = loadHomeFile(detail::inDev ? "configDev.json" : "config.json");
+        const auto configString = loadHomeFile(detail::inDev ? "publisher/configDev.json" : "publisher/config.json");
         return json::parse(configString).get<Config>();
     }
     void saveConfig(Config const& config)
     {
-        saveHomeFile(detail::inDev ? "configDev.json" : "config.json", json{config}.dump());
+        saveHomeFile(detail::inDev ? "publisher/configDev.json" : "publisher/config.json", json{config}.dump());
     }
-
 }

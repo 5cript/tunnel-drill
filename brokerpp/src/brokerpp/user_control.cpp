@@ -1,6 +1,6 @@
 #include <brokerpp/user_control.hpp>
-#include <brokerpp/load_home_file.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
+#include <sharedpp/load_home_file.hpp>
 
 #include <roar/utility/sha.hpp>
 
@@ -25,7 +25,7 @@ namespace TunnelBore::Broker
         NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_EX(Publisher, identity, email, pass, salt, maxServices)
         NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_EX(UsersFile, pepper, publishers)
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
     User::User(std::string email, std::string identity)
         : email_{std::move(email)}
         , identity_(std::move(identity))
@@ -35,16 +35,16 @@ namespace TunnelBore::Broker
     {
         return identity_;
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
     struct UserControl::Implementation
     {
         UsersFile users;
     };
-    //#####################################################################################################################
+    // #####################################################################################################################
     UserControl::UserControl()
         : impl_{std::make_unique<Implementation>()}
     {
-        impl_->users = json::parse(loadHomeFile("users.json")).get<UsersFile>();
+        impl_->users = json::parse(loadHomeFile("broker/users.json")).get<UsersFile>();
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::optional<User> UserControl::getUser(std::string const& name, std::string const& password)
@@ -72,5 +72,5 @@ namespace TunnelBore::Broker
     UserControl::UserControl(UserControl&&) = default;
     //---------------------------------------------------------------------------------------------------------------------
     UserControl& UserControl::operator=(UserControl&&) = default;
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

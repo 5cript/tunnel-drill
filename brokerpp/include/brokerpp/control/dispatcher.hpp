@@ -2,7 +2,7 @@
 
 #include "subscription.hpp"
 
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 
 #include <memory>
 #include <mutex>
@@ -15,11 +15,13 @@ namespace TunnelBore::Broker
     class Dispatcher final
     {
       public:
-        [[nodiscard]] std::shared_ptr<Subscription>
-        subscribe(std::string const& type, std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback);
+        [[nodiscard]] std::shared_ptr<Subscription> subscribe(
+            std::string const& type,
+            std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback);
 
-        [[nodiscard]] std::shared_ptr<Subscription>
-        subscribe(std::string const& type, std::function<void(Subscription::ParameterType const&, std::string const&)> const& callback);
+        [[nodiscard]] std::shared_ptr<Subscription> subscribe(
+            std::string const& type,
+            std::function<void(Subscription::ParameterType const&, std::string const&)> const& callback);
 
         void dispatch(json const& msg, std::string const& ref);
 

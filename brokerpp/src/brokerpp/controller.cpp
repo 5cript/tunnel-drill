@@ -1,10 +1,9 @@
 #include <brokerpp/controller.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 #include <brokerpp/control/control_session.hpp>
 #include <brokerpp/load_home_file.hpp>
 
-#include <jwt-cpp/jwt.h>
-#include <jwt-cpp/traits/nlohmann-json/traits.h>
+#include <sharedpp/jwt.hpp>
 #include <attender/encoding/base64.hpp>
 #include <spdlog/spdlog.h>
 
@@ -12,14 +11,14 @@ using namespace std::literals;
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
+    // #####################################################################################################################
     Controller::Controller(boost::asio::io_context& context, std::function<void(boost::system::error_code)> on_error)
         : context_{&context}
         , ws_{&context,
               std::move(on_error),
               attender::websocket::security_parameters{
-                  .key = loadHomeFile("key.pem"),
-                  .cert = loadHomeFile("cert.pem")}}
+                  .key = loadHomeFile("broker/key.pem"),
+                  .cert = loadHomeFile("broker/cert.pem")}}
     {}
     //---------------------------------------------------------------------------------------------------------------------
     Controller::~Controller()
@@ -41,7 +40,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void Controller::start(unsigned short port)
     {
-        const auto publicJwt = loadHomeFile("jwt/public.key");
+        const auto publicJwt = loadHomeFile("broker/jwt/public.key");
         ws_.start(
             [weak = weak_from_this(), publicJwt](std::shared_ptr<attender::websocket::connection> connection) {
                 auto shared = weak.lock();
@@ -119,5 +118,5 @@ namespace TunnelBore::Broker
     {
         ws_.stop();
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

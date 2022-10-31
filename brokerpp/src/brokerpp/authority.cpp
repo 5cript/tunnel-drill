@@ -1,13 +1,12 @@
 #include <brokerpp/authority.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 
 #include <spdlog/spdlog.h>
-#include <jwt-cpp/jwt.h>
-#include <jwt-cpp/traits/nlohmann-json/traits.h>
+#include <sharedpp/jwt.hpp>
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
+    // #####################################################################################################################
     Authority::Authority(std::string privateJwt)
         : authMutex_{}
         , privateJwt_{std::move(privateJwt)}
@@ -39,5 +38,5 @@ namespace TunnelBore::Broker
         spdlog::info("User '{}' authenticated.", user->identity());
         return signedToken;
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

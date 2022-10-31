@@ -1,8 +1,8 @@
 #include <brokerpp/publisher/tunnel_session.hpp>
 #include <brokerpp/publisher/service.hpp>
 #include <brokerpp/control/control_session.hpp>
-#include <brokerpp/json.hpp>
-#include <brokerpp/publisher/pipe_operation.hpp>
+#include <sharedpp/json.hpp>
+#include <sharedpp/pipe_operation.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -32,7 +32,7 @@ namespace TunnelBore::Broker
             hiddenPort,
             publicPort)
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
     struct TunnelSession::Implementation
     {
         boost::asio::ip::tcp::socket socket;
@@ -60,7 +60,7 @@ namespace TunnelBore::Broker
             , inactivityTimer{socket.get_executor()}
             , wasClosed{false}
             , closeLock{}
-            , remoteAddress{[this](){
+            , remoteAddress{[this]() {
                 auto const& endpoint = this->socket.remote_endpoint();
                 auto const& address = endpoint.address();
                 auto const& port = endpoint.port();
@@ -68,7 +68,7 @@ namespace TunnelBore::Broker
             }()}
         {}
     };
-    //#####################################################################################################################
+    // #####################################################################################################################
     TunnelSession::TunnelSession(
         boost::asio::ip::tcp::socket&& socket,
         std::string tunnelId,
@@ -144,7 +144,9 @@ namespace TunnelBore::Broker
 
                 if (ec)
                 {
-                    spdlog::warn("Initial read for tunnel side failed, this will terminate this side of the tunnel '{}'.", self->impl_->remoteAddress);
+                    spdlog::warn(
+                        "Initial read for tunnel side failed, this will terminate this side of the tunnel '{}'.",
+                        self->impl_->remoteAddress);
                     self->close();
                     return;
                 }
@@ -152,7 +154,9 @@ namespace TunnelBore::Broker
                 auto controlSession = self->impl_->controlSession.lock();
                 if (!controlSession)
                 {
-                    spdlog::warn("Missing control session for new session, this will terminate this tunnel '{}'.", self->impl_->remoteAddress);
+                    spdlog::warn(
+                        "Missing control session for new session, this will terminate this tunnel '{}'.",
+                        self->impl_->remoteAddress);
                     self->close();
                     return;
                 }
@@ -170,7 +174,9 @@ namespace TunnelBore::Broker
 
                         if (!token)
                         {
-                            spdlog::warn("Invalid publisher identity, this will terminate this tunnel '{}'.", self->impl_->remoteAddress);
+                            spdlog::warn(
+                                "Invalid publisher identity, this will terminate this tunnel '{}'.",
+                                self->impl_->remoteAddress);
                             self->close();
                             return;
                         }
@@ -195,7 +201,9 @@ namespace TunnelBore::Broker
                     catch (std::exception const& exc)
                     {
                         spdlog::warn(
-                            "Exception in attempt to parse tunnel '{}' connection from publisher: '{}'", self->impl_->remoteAddress, exc.what());
+                            "Exception in attempt to parse tunnel '{}' connection from publisher: '{}'",
+                            self->impl_->remoteAddress,
+                            exc.what());
                         self->close();
                         return;
                     }
@@ -260,10 +268,8 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::pipeTo(TunnelSession& other)
     {
-        auto pipeOperation = std::make_shared<PipeOperation>(
-            shared_from_this(), 
-            other.shared_from_this()
-        );
+        auto pipeOperation =
+            std::make_shared<PipeOperation<TunnelSession>>(shared_from_this(), other.shared_from_this());
         // pipeOperation self-holds
         pipeOperation->doPipe();
     }
@@ -314,5 +320,5 @@ namespace TunnelBore::Broker
     TunnelSession::TunnelSession(TunnelSession&&) = default;
     //---------------------------------------------------------------------------------------------------------------------
     TunnelSession& TunnelSession::operator=(TunnelSession&&) = default;
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

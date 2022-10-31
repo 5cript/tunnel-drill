@@ -15,15 +15,15 @@
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
-    namespace 
+    // #####################################################################################################################
+    namespace
     {
         struct WriteOperation
         {
             json payload;
         };
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
     struct ControlSession::Implementation
     {
         std::string sessionId;
@@ -72,7 +72,7 @@ namespace TunnelBore::Broker
         , pendingMessages{}
         , writeInProgress{false}
     {}
-    //#####################################################################################################################
+    // #####################################################################################################################
     ControlSession::ControlSession(
         std::string sessionId,
         std::weak_ptr<PageAndControlProvider> PageAndControlProvider,
@@ -232,7 +232,9 @@ namespace TunnelBore::Broker
 
         auto& msg = impl_->pendingMessages.front();
         const auto payloadString = msg.payload.dump();
-        spdlog::info("Writing message to control session: '{}'", payloadString.substr(0, std::min(payloadString.size(), 100ul)));
+        spdlog::info(
+            "Writing message to control session: '{}'",
+            payloadString.substr(0, std::min(payloadString.size(), static_cast<std::size_t>(100))));
 
         impl_->ws->send(payloadString)
             .then([weak = weak_from_this()](std::size_t) {
@@ -270,5 +272,5 @@ namespace TunnelBore::Broker
     {
         impl_->subscriptions.push_back(impl_->dispatcher.subscribe(type, callback));
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

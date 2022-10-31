@@ -1,6 +1,6 @@
 #pragma once
 
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 
 #include <optional>
 #include <string>
@@ -9,7 +9,7 @@ namespace TunnelBore::Broker
 {
     struct ServiceInfo
     {
-        std::optional <std::string> name;
+        std::optional<std::string> name;
         unsigned short publicPort;
         unsigned short hiddenPort;
     };

@@ -1,7 +1,6 @@
 #include <brokerpp/publisher/publisher_token.hpp>
 
-#include <jwt-cpp/jwt.h>
-#include <jwt-cpp/traits/nlohmann-json/traits.h>
+#include <sharedpp/jwt.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -30,8 +29,8 @@ namespace TunnelBore::Broker
             const auto decoded = jwt::decode<jwt::traits::nlohmann_json>(tokenData);
 
             const auto verifier = jwt::verify<jwt::traits::nlohmann_json>()
-                                    .allow_algorithm(jwt::algorithm::rs256{publicJwtKey, "", "", ""})
-                                    .with_issuer("tunnelBore");
+                                      .allow_algorithm(jwt::algorithm::rs256{publicJwtKey, "", "", ""})
+                                      .with_issuer("tunnelBore");
             std::error_code ec;
             verifier.verify(decoded, ec);
             if (ec)
@@ -48,7 +47,7 @@ namespace TunnelBore::Broker
             }
             return PublisherToken{ident->second.get<std::string>(), jsonClaims};
         }
-        catch(std::exception const& exc)
+        catch (std::exception const& exc)
         {
             spdlog::error("Exception in token verification: '{}' (for token '{}')", exc.what(), tokenData);
             return std::nullopt;

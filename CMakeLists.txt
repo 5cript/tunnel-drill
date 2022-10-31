@@ -13,5 +13,6 @@ include(./cmake/dependencies/spdlog.cmake)
 set(JWT_DISABLE_PICOJSON ON CACHE BOOL "no picojson")
 
 # Project Native
+add_subdirectory(sharedpp/src)
 add_subdirectory(brokerpp/src)
 add_subdirectory(publisherpp/src)

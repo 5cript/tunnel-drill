@@ -5,8 +5,7 @@
 #include <brokerpp/publisher/publisher_token.hpp>
 
 #include <roar/utility/base64.hpp>
-#include <jwt-cpp/jwt.h>
-#include <jwt-cpp/traits/nlohmann-json/traits.h>
+#include <sharedpp/jwt.hpp>
 #include <spdlog/spdlog.h>
 
 using namespace boost::beast::http;
@@ -14,7 +13,7 @@ using namespace Roar;
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
+    // #####################################################################################################################
     struct PageAndControlProvider::Implementation
     {
         boost::asio::any_io_executor executor;
@@ -34,7 +33,7 @@ namespace TunnelBore::Broker
             , servedDirectory{std::move(directory)}
         {}
     };
-    //#####################################################################################################################
+    // #####################################################################################################################
     PageAndControlProvider::PageAndControlProvider(
         boost::asio::any_io_executor executor,
         std::string publicJwt,
@@ -140,5 +139,5 @@ namespace TunnelBore::Broker
         }
         return pubIter->second;
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

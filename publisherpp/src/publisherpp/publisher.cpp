@@ -1,0 +1,223 @@
+#include <boost/asio.hpp>
+
+#include <publisherpp/publisher.hpp>
+
+#include <sharedpp/json.hpp>
+#include <roar/ssl/make_ssl_context.hpp>
+#include <roar/curl/request.hpp>
+#include <roar/utility/base64.hpp>
+#include <spdlog/spdlog.h>
+
+using namespace std::string_literals;
+
+namespace TunnelBore::Publisher
+{
+    // #####################################################################################################################
+    Publisher::Publisher(boost::asio::any_io_executor exec, Config cfg)
+        : cfg_{std::move(cfg)}
+        , ws_{{
+              .executor = exec,
+              .sslContext = Roar::makeSslContext(Roar::SslContextCreationParameters{
+                  .certificate = std::string_view{""},
+                  .privateKey = std::string_view{""},
+              }),
+          }}
+        , services_{[this, &exec]() {
+            std::vector<Service> services;
+            for (auto const& serviceInfo : cfg_.services)
+            {
+                services.push_back(Service{
+                    exec,
+                    serviceInfo.name,
+                    serviceInfo.publicPort,
+                    serviceInfo.hiddenHost ? *serviceInfo.hiddenHost : "localhost",
+                    serviceInfo.hiddenPort});
+            }
+            return services;
+        }()}
+        , authToken_{}
+        , tokenCreationTime_{}
+    {}
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::authenticate()
+    {
+        const auto response =
+            Roar::Curl::Request{}
+                .basicAuth(cfg_.identity, cfg_.passHashed)
+                .verifyPeer(false)
+                .verifyHost(false)
+                .sink(authToken_)
+                .get("https://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+
+        if (response.code() != boost::beast::http::status::ok)
+            throw std::runtime_error{"Authentication failed"};
+
+        tokenCreationTime_ = std::chrono::system_clock::now();
+
+        connectToBroker();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::retryConnect()
+    {
+        // TODO:
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::connectToBroker()
+    {
+        ws_.connect({
+                        .host = cfg_.host,
+                        .port = std::to_string(cfg_.port),
+                        .path = "/api/ws/publisher",
+                        .headers = {{
+                            boost::beast::http::field::authorization,
+                            "Bearer "s + Roar::base64Encode(authToken_),
+                        }},
+                    })
+            .then([this]() {
+                doControlReading();
+                json handshake = {{"type", "Handshake"}, {"identity", cfg_.identity}, {"services", services_}};
+                sendQueued(std::move(handshake));
+            })
+            .fail([](auto&& err) {
+                spdlog::error("Failed to connect to broker: {}", err.toString());
+            });
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::doControlReading()
+    {
+        ws_.read()
+            .then([weak = weak_from_this()](auto msg) {
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
+                self->onControlRead(std::move(msg));
+                self->doControlReading();
+            })
+            .fail([](auto const& err) {
+                spdlog::error("Failed to read from broker: '{}'", err.toString());
+            });
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::sendOnceFromQueue()
+    {
+        std::scoped_lock lock{controlSendQueueMutex_};
+        if (controlSendOperations_.empty())
+        {
+            sendInProgress_ = false;
+            return;
+        }
+        sendInProgress_ = true;
+
+        auto op = std::move(controlSendOperations_.front());
+        controlSendOperations_.pop_front();
+
+        ws_.send(op.payload.dump())
+            .then([cb = std::move(op.callback), weak = weak_from_this()](auto&&) {
+                cb();
+
+                auto self = weak.lock();
+                if (!self)
+                    return;
+
+                self->sendOnceFromQueue();
+            })
+            .fail([](auto const& err) {
+                spdlog::error("Failed to send to broker: '{}'", err.toString());
+                // TODO: Am i still connected? If not reconnect?
+            });
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::sendQueued(json&& j)
+    {
+        std::scoped_lock lock{controlSendQueueMutex_};
+        controlSendOperations_.emplace_back(ControlSendOperation{std::move(j), []() {}});
+        if (!sendInProgress_)
+            sendOnceFromQueue();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::onControlRead(Roar::WebsocketReadResult message)
+    {
+        json j = json::parse(message.message);
+        const auto type = j["type"].get<std::string>();
+        if (type == "NewTunnel")
+        {
+            spdlog::info("Received NewTunnel message from broker");
+            onNewTunnel(
+                j["serviceId"].get<std::string>(),
+                j["tunnelId"].get<std::string>(),
+                j["hiddenPort"].get<int>(),
+                j["publicPort"].get<int>(),
+                j["socketType"].get<std::string>());
+        }
+        else if (type == "Error")
+        {
+            spdlog::error("Received Error message from broker: {}", j.dump());
+        }
+        else
+        {
+            spdlog::error("Received unknown message from broker: {}", j.dump());
+        }
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::onNewTunnel(
+        std::string const& serviceId,
+        std::string const& tunnelId,
+        int hiddenPort,
+        int publicPort,
+        std::string const& socketType)
+    {
+        spdlog::info("Creating new tunnel for service '{}' with id '{}'", serviceId, tunnelId);
+
+        auto respondWithFailure = [&](std::string const& reason) {
+            sendQueued({
+                {"type", "NewTunnelFailed"},
+                {"serviceId", serviceId},
+                {"tunnelId", tunnelId},
+                {"hiddenPort", hiddenPort},
+                {"publicPort", publicPort},
+                {"socketType", socketType},
+                {"reason", reason},
+            });
+        };
+
+        auto service = std::find_if(services_.begin(), services_.end(), [&](auto const& service) {
+            return service.hiddenPort() == hiddenPort && service.publicPort() == publicPort;
+        });
+        if (service == services_.end())
+        {
+            spdlog::error("Received NewTunnel message for unknown service '{}'", serviceId);
+            respondWithFailure("Unknown service");
+            return;
+        }
+
+        std::string body;
+        const auto response = Roar::Curl::Request{}
+                                  .verifyPeer(false)
+                                  .verifyHost(false)
+                                  .basicAuth(cfg_.identity, cfg_.passHashed)
+                                  .source(json{
+                                      {"tunnelId", tunnelId},
+                                      {"serviceId", serviceId},
+                                      {"hiddenPort", hiddenPort},
+                                      {"publicPort", publicPort}}
+                                              .dump())
+                                  .sink(body)
+                                  .post(
+                                      "https://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
+                                      "/api/auth/sign-json");
+
+        if (response.code() != boost::beast::http::status::ok)
+        {
+            spdlog::error("Failed to sign tunnel request: {}", body);
+            respondWithFailure("Failed to sign tunnel request");
+            return;
+        }
+        const auto tunnelToken = json::parse(body)["token"].get<std::string>();
+        service->createSession(cfg_.host, tunnelToken, tunnelId);
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    Publisher::~Publisher()
+    {}
+    // #####################################################################################################################
+}

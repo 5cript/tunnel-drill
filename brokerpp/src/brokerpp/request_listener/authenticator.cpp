@@ -1,12 +1,11 @@
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/request_listener/authenticator.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 
 #include <roar/mechanics/cookie.hpp>
 
 #include <spdlog/spdlog.h>
-#include <jwt-cpp/jwt.h>
-#include <jwt-cpp/traits/nlohmann-json/traits.h>
+#include <sharedpp/jwt.hpp>
 
 using namespace boost::beast::http;
 

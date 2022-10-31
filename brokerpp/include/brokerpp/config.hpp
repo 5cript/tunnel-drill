@@ -1,6 +1,6 @@
 #pragma once
 
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 
 namespace TunnelBore::Broker
 {

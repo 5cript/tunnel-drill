@@ -1,7 +1,7 @@
 #include <brokerpp/program_options.hpp>
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/controller.hpp>
-#include <brokerpp/load_home_file.hpp>
+#include <sharedpp/load_home_file.hpp>
 #include <brokerpp/config.hpp>
 #include <brokerpp/request_listener/authenticator.hpp>
 #include <brokerpp/request_listener/page_control_provider.hpp>
@@ -21,11 +21,11 @@
 #include <filesystem>
 #include <fstream>
 
-// FIXME: this might fill up quickly
-constexpr static auto IoContextThreadPoolSize = 8;
+constexpr static auto IoContextThreadPoolSize = 16;
 
 int main(int argc, char** argv)
 {
+    using namespace TunnelBore;
     using namespace TunnelBore::Broker;
     using namespace std::string_literals;
 
@@ -36,24 +36,22 @@ int main(int argc, char** argv)
     setupHome();
 
     boost::asio::thread_pool pool{IoContextThreadPoolSize};
-
-    spdlog::info("Config files are at '{}'", getHomePath().string());
-
-    Roar::Server server({
-        .executor = pool.executor(),
-        .sslContext = Roar::makeSslContext({
-            .certificate = getHomePath() / "cert.pem",
-            .privateKey = getHomePath() / "key.pem",
-        })
-    });
-
     const auto shutdownPool = Roar::ScopeExit{[&pool]() {
         pool.stop();
         pool.join();
     }};
 
-    const auto privateJwt = loadHomeFile("jwt/private.key");
-    const auto publicJwt = loadHomeFile("jwt/public.key");
+    spdlog::info("Config files are at '{}'", getHomePath().string());
+
+    Roar::Server server(
+        {.executor = pool.executor(),
+         .sslContext = Roar::makeSslContext({
+             .certificate = getHomePath() / "cert.pem",
+             .privateKey = getHomePath() / "key.pem",
+         })});
+
+    const auto privateJwt = loadHomeFile("broker/jwt/private.key");
+    const auto publicJwt = loadHomeFile("broker/jwt/public.key");
     const auto config = loadConfig();
 
     auto authority = std::make_shared<Authority>(privateJwt);

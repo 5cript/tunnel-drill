@@ -1,7 +1,7 @@
 #pragma once
 
 #include <brokerpp/publisher/publisher_token.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 #include <brokerpp/control/subscription.hpp>
 #include <roar/websocket/websocket_session.hpp>
 

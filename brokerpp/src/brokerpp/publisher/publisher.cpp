@@ -1,7 +1,7 @@
 #include <brokerpp/winsock_first.hpp>
 #include <brokerpp/publisher/publisher.hpp>
 #include <brokerpp/publisher/service.hpp>
-#include <brokerpp/json.hpp>
+#include <sharedpp/json.hpp>
 #include <roar/dns/resolve.hpp>
 #include <attender/session/uuid_session_cookie_generator.hpp>
 
@@ -14,7 +14,7 @@ using namespace std::literals;
 
 namespace TunnelBore::Broker
 {
-    //#####################################################################################################################
+    // #####################################################################################################################
     struct Publisher::Implementation
     {
         boost::asio::any_io_executor executor;
@@ -32,7 +32,7 @@ namespace TunnelBore::Broker
             , controlSession{}
         {}
     };
-    //#####################################################################################################################
+    // #####################################################################################################################
     Publisher::Publisher(boost::asio::any_io_executor executor, std::string identity)
         : impl_{std::make_unique<Implementation>(executor, std::move(identity))}
     {}
@@ -106,14 +106,16 @@ namespace TunnelBore::Broker
         };
 
         std::scoped_lock lock{impl_->serviceGuard};
-        std::vector <std::string> recreatedServices;
+        std::vector<std::string> recreatedServices;
         for (auto const& [serviceId, service] : impl_->services)
         {
             if (serviceInfo.publicPort == service->info().publicPort)
             {
                 // TODO: This does not change service config changes. How to handle this?
                 spdlog::info(
-                    "Service for '{}' with public port '{}' already existed, recreate.", impl_->identity, serviceInfo.publicPort);
+                    "Service for '{}' with public port '{}' already existed, recreate.",
+                    impl_->identity,
+                    serviceInfo.publicPort);
                 recreatedServices.push_back(serviceId);
                 return returnResult(true);
             }
@@ -163,5 +165,5 @@ namespace TunnelBore::Broker
     {
         impl_->services.clear();
     }
-    //#####################################################################################################################
+    // #####################################################################################################################
 }

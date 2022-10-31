@@ -1,12 +1,12 @@
-#include <brokerpp/load_home_file.hpp>
+#include <sharedpp/load_home_file.hpp>
 
-#include <roar/filesystem/special_paths.hpp>
 #include <fstream>
+#include <roar/filesystem/special_paths.hpp>
 #include <sstream>
 
 using namespace std::literals;
 
-namespace TunnelBore::Broker
+namespace TunnelBore
 {
     std::string loadHomeFile(std::filesystem::path const& subpath)
     {
@@ -28,7 +28,7 @@ namespace TunnelBore::Broker
     }
     std::filesystem::path getHomePath()
     {
-        return Roar::resolvePath("~/.tbore/broker");
+        return Roar::resolvePath("~/.tbore");
     }
     void setupHome()
     {
@@ -36,4 +36,4 @@ namespace TunnelBore::Broker
         if (!std::filesystem::exists(homePath))
             std::filesystem::create_directories(homePath);
     }
-}
+} // namespace TunnelBore
