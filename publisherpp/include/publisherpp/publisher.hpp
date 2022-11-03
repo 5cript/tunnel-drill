@@ -50,7 +50,7 @@ namespace TunnelBore::Publisher
             std::string const& socketType);
 
       private:
-        Config cfg_;
+        const Config cfg_;
         std::shared_ptr<Roar::WebsocketClient> ws_;
         std::vector<std::shared_ptr<Service>> services_;
         std::string authToken_;

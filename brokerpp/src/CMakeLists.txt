@@ -51,7 +51,7 @@ target_link_libraries(
 )
 
 set(DEBUG_COMPILE_FLAGS -g -fsized-deallocation)
-set(RELEASE_COMPILE_FLAGS -O1 -g -fsized-deallocation)
+set(RELEASE_COMPILE_FLAGS -O3 -fsized-deallocation)
 target_compile_options(broker PRIVATE $<$<CONFIG:DEBUG>:${DEBUG_COMPILE_FLAGS}>)
 target_compile_options(broker-lib PRIVATE $<$<CONFIG:DEBUG>:${DEBUG_COMPILE_FLAGS}>)
 target_compile_options(broker PRIVATE $<$<CONFIG:RELEASE>:${RELEASE_COMPILE_FLAGS}>)
