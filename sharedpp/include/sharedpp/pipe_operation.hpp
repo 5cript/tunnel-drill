@@ -17,12 +17,9 @@ namespace TunnelBore
             : sideOriginal_(sideOriginal)
             , sideOther_(sideOther)
             , buffer_(4096, '\0')
-            , totalTransfer_{0}
         {}
         ~PipeOperation()
         {
-            spdlog::debug("PipeOperation::~PipeOperation()");
-            spdlog::info("Pipe operation total transfer: {}.", totalTransfer_);
         }
         PipeOperation(PipeOperation const&) = delete;
         PipeOperation(PipeOperation&&) = delete;
@@ -45,7 +42,6 @@ namespace TunnelBore
                 boost::asio::buffer(buffer_),
                 [operation = this->shared_from_this()](auto const& ec, std::size_t bytesTransferred) {
                     auto sideOriginal = operation->sideOriginal_.lock();
-                    operation->totalTransfer_ += bytesTransferred;
 
                     if (!sideOriginal)
                         return;
@@ -65,12 +61,37 @@ namespace TunnelBore
             if (!sideOther)
                 return;
             sideOther->resetTimer();
+
+            if (bytesTransferred > buffer_.size() || bytesTransferred == 0)
+            {
+                if (bytesTransferred > buffer_.size())
+                    spdlog::error("bytesTransferred is too large, killing pipe: {}", bytesTransferred);
+                auto sideOriginal = sideOriginal_.lock();
+
+                if (sideOriginal)
+                    sideOriginal->close();
+                if (sideOther)
+                    sideOther->close();
+                return;
+            }
+
             boost::asio::async_write(
                 sideOther->socket(),
                 boost::asio::buffer(buffer_, bytesTransferred),
-                [operation = this->shared_from_this(), close](auto const& ec, std::size_t) {
+                [operation = this->shared_from_this(), close, expectedWrittenAmount = bytesTransferred](auto const& ec, std::size_t bytesWritten) {
                     auto sideOriginal = operation->sideOriginal_.lock();
                     auto sideOther = operation->sideOther_.lock();
+
+                    if (expectedWrittenAmount != bytesWritten)
+                    {
+                        spdlog::error("bytesWritten is not equal to bytesTransferred, killing pipe: expected {} != written {}", expectedWrittenAmount, bytesWritten);
+
+                        if (sideOriginal)
+                            sideOriginal->close();
+                        if (sideOther)
+                            sideOther->close();
+                        return;
+                    }
 
                     if (!sideOriginal)
                     {

@@ -20,11 +20,30 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <stacktrace>
+
+#if __linux__
+#include <signal.h>
+#include <cstdlib>
+#endif
 
 constexpr static auto IoContextThreadPoolSize = 16;
 
+#if __linux__
+void signalHandler(int signum)
+{
+    auto trace = std::stacktrace::current();
+    std::cout << std::to_string(trace) << std::endl;
+    std::exit(signum);
+}
+#endif
+
 int main(int argc, char** argv)
 {
+#if __linux__
+    signal(SIGSEGV, signalHandler);
+#endif
+
     using namespace TunnelBore;
     using namespace TunnelBore::Broker;
     using namespace std::string_literals;

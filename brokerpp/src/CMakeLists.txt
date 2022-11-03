@@ -44,10 +44,18 @@ add_executable(broker
 target_link_libraries(
     broker
     PRIVATE
+        -lstdc++_libbacktrace
         project-settings
         project-warnings
         broker-lib
 )
+
+set(DEBUG_COMPILE_FLAGS -g -fsized-deallocation)
+set(RELEASE_COMPILE_FLAGS -O1 -g -fsized-deallocation)
+target_compile_options(broker PRIVATE $<$<CONFIG:DEBUG>:${DEBUG_COMPILE_FLAGS}>)
+target_compile_options(broker-lib PRIVATE $<$<CONFIG:DEBUG>:${DEBUG_COMPILE_FLAGS}>)
+target_compile_options(broker PRIVATE $<$<CONFIG:RELEASE>:${RELEASE_COMPILE_FLAGS}>)
+target_compile_options(broker-lib PRIVATE $<$<CONFIG:RELEASE>:${RELEASE_COMPILE_FLAGS}>)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (MSYS2_CLANG)

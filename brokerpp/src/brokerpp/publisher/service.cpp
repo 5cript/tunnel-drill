@@ -24,7 +24,7 @@ namespace TunnelBore::Broker
         boost::asio::ip::tcp::endpoint bindEndpoint;
         std::weak_ptr<Publisher> publisher;
         attender::uuid_generator uuidGenerator;
-        std::mutex sessionGuard;
+        std::recursive_mutex sessionGuard;
         std::string serviceId;
 
         Implementation(
@@ -76,7 +76,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void Service::connectTunnels(std::string const& idForClientTunnel, std::string const& idForPublisherTunnel)
     {
-        std::lock_guard<std::mutex> lock{impl_->sessionGuard};
+        std::scoped_lock lock{impl_->sessionGuard};
         auto clientTunnel = impl_->sessions.find(idForClientTunnel);
         auto publisherTunnel = impl_->sessions.find(idForPublisherTunnel);
 
@@ -127,7 +127,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void Service::closeTunnelSide(std::string const& id)
     {
-        std::lock_guard<std::mutex> lock{impl_->sessionGuard};
+        std::scoped_lock lock{impl_->sessionGuard};
         impl_->sessions.erase(id);
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -159,6 +159,11 @@ namespace TunnelBore::Broker
                     return self->acceptOnce();
 
                 const auto tunnelId = self->impl_->uuidGenerator.generate_id();
+                spdlog::info(
+                    "New connection accepted '{}' with tunnelId '{}'.", 
+                    socket->remote_endpoint(ec).address().to_string(), 
+                    tunnelId
+                );
                 {
                     std::scoped_lock sessionLock{self->impl_->sessionGuard};
                     auto tunnelSide =

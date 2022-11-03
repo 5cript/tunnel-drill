@@ -34,6 +34,8 @@ namespace TunnelBore::Broker
     // #####################################################################################################################
     struct TunnelSession::Implementation
     {
+        std::recursive_mutex closeLock;
+        std::recursive_mutex peekBufferLock;
         boost::asio::ip::tcp::socket socket;
         std::weak_ptr<ControlSession> controlSession;
         std::string peekBuffer;
@@ -42,7 +44,6 @@ namespace TunnelBore::Broker
         std::weak_ptr<Service> service;
         boost::asio::deadline_timer inactivityTimer;
         std::atomic_bool wasClosed;
-        std::recursive_mutex closeLock;
         std::string remoteAddress;
 
         Implementation(
@@ -50,7 +51,8 @@ namespace TunnelBore::Broker
             std::string tunnelId,
             std::weak_ptr<ControlSession> controlSession,
             std::weak_ptr<Service> service)
-            : socket{std::move(socket)}
+            : closeLock{}
+            , socket{std::move(socket)}
             , controlSession{std::move(controlSession)}
             , peekBuffer(4096, '\0')
             , isPublisherSide{false}
@@ -58,7 +60,6 @@ namespace TunnelBore::Broker
             , service{std::move(service)}
             , inactivityTimer{socket.get_executor()}
             , wasClosed{false}
-            , closeLock{}
             , remoteAddress{[this]() {
                 auto const& endpoint = this->socket.remote_endpoint();
                 auto const& address = endpoint.address();
@@ -99,6 +100,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::resetTimer()
     {
+        std::scoped_lock lock{impl_->closeLock};
         impl_->inactivityTimer.expires_from_now(boost::posix_time::seconds(InactivityTimeout.count()));
         impl_->inactivityTimer.async_wait([weak = weak_from_this()](auto const& ec) {
             if (ec == boost::asio::error::operation_aborted)
@@ -118,6 +120,7 @@ namespace TunnelBore::Broker
             // Check whether the deadline has passed. We compare the deadline against
             // the current time since a new asynchronous operation may have moved the
             // deadline before this actor had a chance to run.
+            std::scoped_lock lock{self->impl_->closeLock};
             if (self->impl_->inactivityTimer.expires_at() <= boost::asio::deadline_timer::traits_type::now())
             {
                 spdlog::warn("Closing tunnel '{}' due to inactivity.", self->impl_->remoteAddress);
@@ -165,6 +168,15 @@ namespace TunnelBore::Broker
                 {
                     try
                     {
+                        if (self->impl_->peekBuffer.size() < publisherToBrokerPrefix.size() + 1)
+                        {
+                            spdlog::warn(
+                                "Invalid initial message for tunnel side, this will terminate this side of the tunnel '{}'",
+                                self->impl_->remoteAddress);
+                            self->close();
+                            return;
+                        }
+
                         self->impl_->peekBuffer = self->impl_->peekBuffer.substr(
                             publisherToBrokerPrefix.size() + 1, bytesTransferred - publisherToBrokerPrefix.size() - 1);
 

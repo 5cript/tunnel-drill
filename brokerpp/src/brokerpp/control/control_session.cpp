@@ -239,7 +239,7 @@ namespace TunnelBore::Broker
         }
         impl_->writeInProgress = true;
 
-        auto& msg = impl_->pendingMessages.front();
+        auto msg = impl_->pendingMessages.front();
         spdlog::info(
             "Writing message to control session: '{}'",
             msg.payload.substr(0, std::min(msg.payload.size(), static_cast<std::size_t>(100))));
@@ -259,10 +259,10 @@ namespace TunnelBore::Broker
 
                 spdlog::error("Failed to send message: {}", error.toString());
                 self->impl_->endSelf();
-                self->writeOnce();
             });
 
-        impl_->pendingMessages.pop_front();
+        if (!impl_->pendingMessages.empty())
+            impl_->pendingMessages.pop_front();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::writeJson(json const& j)
