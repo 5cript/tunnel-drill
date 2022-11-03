@@ -222,6 +222,7 @@ namespace TunnelBore::Broker
                 }
                 else
                 {
+                    self->impl_->peekBuffer.resize(bytesTransferred);
                     spdlog::info(
                         "Connection '{}' does not look like publisher side. Bytes received '{}', Starting with '{}'.",
                         self->impl_->remoteAddress,
