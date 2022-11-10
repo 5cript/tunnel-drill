@@ -75,53 +75,67 @@ namespace TunnelBore
                 return;
             }
 
+            auto onWriteDone = std::make_shared<std::function<void(boost::system::error_code, std::size_t)>>();
+            *onWriteDone = [operation = this->shared_from_this(), close, onWriteDone, expectedWrittenAmount = bytesTransferred] mutable
+            (auto const& ec, std::size_t bytesWritten)
+            {
+                Roar::ScopeExit onExit([onWriteDone]() { onWriteDone.reset(); });
+
+                auto sideOriginal = operation->sideOriginal_.lock();
+                auto sideOther = operation->sideOther_.lock();
+
+                if (expectedWrittenAmount != bytesWritten)
+                {
+                    spdlog::warn("bytesWritten is not equal to bytesTransferred, killing pipe: expected {} != written {}", expectedWrittenAmount, bytesWritten);
+                    onExit.disarm();
+                    boost::asio::async_write(
+                        sideOther->socket(),
+                        boost::asio::buffer(buffer_.data() + bytesWritten, expectedWrittenAmount - bytesWritten),
+                        *onWriteDone
+                    );
+
+                    // if (sideOriginal)
+                    //     sideOriginal->close();
+                    // if (sideOther)
+                    //     sideOther->close();
+                    // return;
+                }
+
+                if (!sideOriginal)
+                {
+                    spdlog::error("Tunnel session died while piping (sideOriginal::write)");
+                }
+                if (!sideOther)
+                {
+                    spdlog::error("Tunnel session died while piping (sideOther::write)");
+                }
+
+                if (ec || close)
+                {
+                    if (ec && sideOther)
+                        spdlog::warn(
+                            "Error in pipeTo(2) in tunnel '{}': '{}'", sideOther->remoteAddress(), ec.message());
+
+                    if (sideOriginal)
+                        sideOriginal->close();
+                    if (sideOther)
+                        sideOther->close();
+                    return;
+                }
+
+                if (sideOriginal)
+                    sideOriginal->resetTimer();
+                if (sideOther)
+                    sideOther->resetTimer();
+
+                operation->read();
+            };
+
             boost::asio::async_write(
                 sideOther->socket(),
                 boost::asio::buffer(buffer_, bytesTransferred),
-                [operation = this->shared_from_this(), close, expectedWrittenAmount = bytesTransferred](auto const& ec, std::size_t bytesWritten) {
-                    auto sideOriginal = operation->sideOriginal_.lock();
-                    auto sideOther = operation->sideOther_.lock();
-
-                    if (expectedWrittenAmount != bytesWritten)
-                    {
-                        spdlog::error("bytesWritten is not equal to bytesTransferred, killing pipe: expected {} != written {}", expectedWrittenAmount, bytesWritten);
-
-                        if (sideOriginal)
-                            sideOriginal->close();
-                        if (sideOther)
-                            sideOther->close();
-                        return;
-                    }
-
-                    if (!sideOriginal)
-                    {
-                        spdlog::error("Tunnel session died while piping (sideOriginal::write)");
-                    }
-                    if (!sideOther)
-                    {
-                        spdlog::error("Tunnel session died while piping (sideOther::write)");
-                    }
-
-                    if (ec || close)
-                    {
-                        if (ec && sideOther)
-                            spdlog::warn(
-                                "Error in pipeTo(2) in tunnel '{}': '{}'", sideOther->remoteAddress(), ec.message());
-
-                        if (sideOriginal)
-                            sideOriginal->close();
-                        if (sideOther)
-                            sideOther->close();
-                        return;
-                    }
-
-                    if (sideOriginal)
-                        sideOriginal->resetTimer();
-                    if (sideOther)
-                        sideOther->resetTimer();
-
-                    operation->read();
-                });
+                *onWriteDone
+            );
         }
 
       private:
