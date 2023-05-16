@@ -1,6 +1,6 @@
 #include <brokerpp/program_options.hpp>
 #include <brokerpp/winsock_first.hpp>
-#include <brokerpp/controller.hpp>
+// #include <brokerpp/controller.hpp>
 #include <sharedpp/load_home_file.hpp>
 #include <brokerpp/config.hpp>
 #include <brokerpp/request_listener/authenticator.hpp>
@@ -20,11 +20,12 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <stacktrace>
+// Missing support for some systems:
+// #include <stacktrace>
 
 #if __linux__
-#include <signal.h>
-#include <cstdlib>
+#    include <signal.h>
+#    include <cstdlib>
 #endif
 
 constexpr static auto IoContextThreadPoolSize = 16;
@@ -32,8 +33,8 @@ constexpr static auto IoContextThreadPoolSize = 16;
 #if __linux__
 void signalHandler(int signum)
 {
-    auto trace = std::stacktrace::current();
-    std::cout << std::to_string(trace) << std::endl;
+    // auto trace = std::stacktrace::current();
+    // std::cout << std::to_string(trace) << std::endl;
     std::exit(signum);
 }
 #endif
