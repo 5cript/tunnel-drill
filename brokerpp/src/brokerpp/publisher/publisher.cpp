@@ -3,7 +3,7 @@
 #include <brokerpp/publisher/service.hpp>
 #include <sharedpp/json.hpp>
 #include <roar/dns/resolve.hpp>
-#include <attender/session/uuid_session_cookie_generator.hpp>
+#include <sharedpp/uuid_generator.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -18,7 +18,7 @@ namespace TunnelBore::Broker
     struct Publisher::Implementation
     {
         boost::asio::any_io_executor executor;
-        attender::uuid_generator uuidGenerator;
+        uuid_generator uuidGenerator;
         std::string identity;
         std::recursive_mutex serviceGuard;
         std::unordered_map<std::string, std::shared_ptr<Service>> services;

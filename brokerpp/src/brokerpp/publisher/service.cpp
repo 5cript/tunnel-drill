@@ -4,7 +4,7 @@
 #include <brokerpp/publisher/service.hpp>
 #include <brokerpp/publisher/publisher.hpp>
 #include <brokerpp/publisher/tunnel_session.hpp>
-#include <attender/session/uuid_session_cookie_generator.hpp>
+#include <sharedpp/uuid_generator.hpp>
 #include <spdlog/spdlog.h>
 
 #include <mutex>
@@ -23,7 +23,7 @@ namespace TunnelBore::Broker
         ServiceInfo info;
         boost::asio::ip::tcp::endpoint bindEndpoint;
         std::weak_ptr<Publisher> publisher;
-        attender::uuid_generator uuidGenerator;
+        uuid_generator uuidGenerator;
         std::recursive_mutex sessionGuard;
         std::string serviceId;
 
@@ -160,10 +160,9 @@ namespace TunnelBore::Broker
 
                 const auto tunnelId = self->impl_->uuidGenerator.generate_id();
                 spdlog::info(
-                    "New connection accepted '{}' with tunnelId '{}'.", 
-                    socket->remote_endpoint(ec).address().to_string(), 
-                    tunnelId
-                );
+                    "New connection accepted '{}' with tunnelId '{}'.",
+                    socket->remote_endpoint(ec).address().to_string(),
+                    tunnelId);
                 {
                     std::scoped_lock sessionLock{self->impl_->sessionGuard};
                     auto tunnelSide =

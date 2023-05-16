@@ -31,7 +31,6 @@ target_link_libraries(
     PUBLIC
         spdlog
         roar
-        attender
         jwt-cpp::jwt-cpp
         Boost::program_options
         shared-lib
@@ -44,7 +43,6 @@ add_executable(broker
 target_link_libraries(
     broker
     PRIVATE
-        -lstdc++_libbacktrace
         project-settings
         project-warnings
         broker-lib
