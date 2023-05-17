@@ -21,7 +21,7 @@ target_include_directories(
         ${CMAKE_SOURCE_DIR}/brokerpp/include
 )
 
-find_package(Boost 1.78.0 REQUIRED COMPONENTS system program_options)
+find_package(Boost 1.81.0 REQUIRED COMPONENTS system)
 
 target_link_libraries(
     broker-lib
@@ -32,7 +32,8 @@ target_link_libraries(
         spdlog
         roar
         jwt-cpp::jwt-cpp
-        Boost::program_options
+        cxxopts::cxxopts
+        Boost::system
         shared-lib
 )
 

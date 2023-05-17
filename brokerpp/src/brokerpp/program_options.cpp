@@ -1,22 +1,17 @@
-#include <boost/program_options/options_description.hpp>
-#include <boost/program_options/variables_map.hpp>
 #include <brokerpp/program_options.hpp>
 
-#include <boost/program_options.hpp>
-
-namespace po = boost::program_options;
+#include <cxxopts.hpp>
 
 namespace TunnelBore::Broker
 {
     ProgramOptions parseProgramOptions(int argc, char** argv)
     {
-        po::options_description desc("Program options");
-        desc.add_options()(
-            "served-directory,s", po::value<std::string>()->default_value("./httpdocs"), "Directory to serve.");
-        po::variables_map vm;
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);
+        cxxopts::Options options("connection broker", "Establishes connections between hidden servers and clients.");
 
-        return ProgramOptions{.servedDirectory = vm["served-directory"].as<std::string>()};
+        options.add_options()("served-directory", "Directory to serve.", cxxopts::value<std::string>()->default_value("./httpdocs"));
+
+        const auto result = options.parse(argc, argv);
+
+        return ProgramOptions{.servedDirectory = result["served-directory"].as<std::string>()};
     }
 }
