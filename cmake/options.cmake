@@ -1,1 +1,1 @@
-option(MSYS2_CLANG "This is an msys2 clang build?" off)
+option(ENABLE_SANITIZERS "Enable sanitizers" OFF)

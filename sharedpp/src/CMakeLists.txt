@@ -1,5 +1,6 @@
 add_library(shared-lib STATIC
     sharedpp/load_home_file.cpp
+    sharedpp/printable_string.cpp
 )
 
 target_include_directories(

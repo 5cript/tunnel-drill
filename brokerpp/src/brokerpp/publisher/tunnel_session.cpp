@@ -4,6 +4,7 @@
 #include <sharedpp/json.hpp>
 #include <sharedpp/pipe_operation.hpp>
 #include <sharedpp/constants.hpp>
+#include <sharedpp/printable_string.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -144,10 +145,16 @@ namespace TunnelBore::Broker
                 if (!service)
                     return;
 
+                auto info = service->info();
+
                 if (ec)
                 {
                     spdlog::warn(
-                        "Initial read for tunnel side failed, this will terminate this side of the tunnel '{}': '{}'",
+                        "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this side "
+                        "of the tunnel '{}': '{}'",
+                        info.name ? *info.name : "noname",
+                        info.publicPort,
+                        info.hiddenPort,
                         self->impl_->remoteAddress,
                         ec.message());
                     self->close();
@@ -171,7 +178,8 @@ namespace TunnelBore::Broker
                         if (self->impl_->peekBuffer.size() < publisherToBrokerPrefix.size() + 1)
                         {
                             spdlog::warn(
-                                "Invalid initial message for tunnel side, this will terminate this side of the tunnel '{}'",
+                                "Invalid initial message for tunnel side, this will terminate this side of the tunnel "
+                                "'{}'",
                                 self->impl_->remoteAddress);
                             self->close();
                             return;
@@ -224,10 +232,16 @@ namespace TunnelBore::Broker
                 {
                     self->impl_->peekBuffer.resize(bytesTransferred);
                     spdlog::info(
-                        "Connection '{}' does not look like publisher side. Bytes received '{}', Starting with '{}'.",
+                        "Connection '{}' for service '{}:{}->{}' does not look like publisher side. Bytes received "
+                        "'{}', "
+                        "Starting with '{}'.",
                         self->impl_->remoteAddress,
+                        info.name ? *info.name : "noname",
+                        info.publicPort,
+                        info.hiddenPort,
                         bytesTransferred,
-                        self->impl_->peekBuffer.substr(0, std::min(std::size_t{24}, bytesTransferred)));
+                        makePrintableString(
+                            self->impl_->peekBuffer.substr(0, std::min(std::size_t{24}, bytesTransferred))));
                 }
 
                 // assume this is not json from the publisher side.
@@ -238,7 +252,18 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::link(TunnelSession& other)
     {
-        spdlog::info("Connecting tunnel '{}' with '{}'.", impl_->remoteAddress, other.impl_->remoteAddress);
+        ServiceInfo info{std::nullopt, 0, 0};
+        auto service = impl_->service.lock();
+        if (service)
+            info = service->info();
+
+        spdlog::info(
+            "Connecting tunnel '{}' with '{}' for service '{}:{}->{}'.",
+            impl_->remoteAddress,
+            other.impl_->remoteAddress,
+            info.name ? *info.name : "noname",
+            info.publicPort,
+            info.hiddenPort);
 
         // Self -> Other
         if (!impl_->peekBuffer.empty())

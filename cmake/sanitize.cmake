@@ -1,0 +1,26 @@
+function(enable_address_sanitizer)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+endfunction()
+
+function(enable_memory_sanitizer)
+    add_compile_options(-fsanitize=memory -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=memory)
+endfunction()
+
+function(enable_undefined_sanitizer)
+    add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=undefined)
+endfunction()
+
+function(enable_thread_sanitizer)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+endfunction()
+
+function(enable_sanitizers)
+    enable_address_sanitizer()
+    enable_memory_sanitizer()
+    enable_undefined_sanitizer()
+    enable_thread_sanitizer()
+endfunction()

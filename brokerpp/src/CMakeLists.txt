@@ -29,7 +29,7 @@ target_link_libraries(
         project-settings
         project-warnings
     PUBLIC
-        spdlog
+        spdlog::spdlog
         roar
         jwt-cpp::jwt-cpp
         cxxopts::cxxopts

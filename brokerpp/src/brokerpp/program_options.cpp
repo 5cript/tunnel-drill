@@ -1,4 +1,5 @@
 #include <brokerpp/program_options.hpp>
+#include <roar/filesystem/special_paths.hpp>
 
 #include <cxxopts.hpp>
 
@@ -8,7 +9,10 @@ namespace TunnelBore::Broker
     {
         cxxopts::Options options("connection broker", "Establishes connections between hidden servers and clients.");
 
-        options.add_options()("served-directory", "Directory to serve.", cxxopts::value<std::string>()->default_value("./httpdocs"));
+        options.add_options()(
+            "served-directory",
+            "Directory to serve.",
+            cxxopts::value<std::string>()->default_value(Roar::resolvePath("~/httpdocs").string()));
 
         const auto result = options.parse(argc, argv);
 
