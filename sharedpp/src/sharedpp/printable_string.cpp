@@ -16,7 +16,7 @@ std::string makePrintableString(std::string_view input)
 
             result.push_back('\\');
             result.push_back('x');
-            result.push_back(hexDigits[c >> 4]);
+            result.push_back(hexDigits[(c & 0xF0) >> 4]);
             result.push_back(hexDigits[c & 0xF]);
         }
     });

@@ -9,3 +9,4 @@ compile_commands.json
 tunnel-control/node_modules
 page_old/node_modules
 scripts
+dependencies
