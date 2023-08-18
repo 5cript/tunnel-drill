@@ -63,16 +63,20 @@ int main(int argc, char** argv)
 
     spdlog::info("Config files are at '{}'", getHomePath().string());
 
-    Roar::Server server(
-        {.executor = pool.executor(),
-         .sslContext = Roar::makeSslContext({
-             .certificate = getHomePath() / "broker/cert.pem",
-             .privateKey = getHomePath() / "broker/key.pem",
-         })});
-
     const auto privateJwt = loadHomeFile("broker/jwt/private.key");
     const auto publicJwt = loadHomeFile("broker/jwt/public.key");
     const auto config = loadConfig();
+
+    Roar::Server server(
+        {.executor = pool.executor(),
+         .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
+            if (!config.ssl)
+                return std::nullopt;
+            return Roar::makeSslContext({
+             .certificate = getHomePath() / "broker/cert.pem",
+             .privateKey = getHomePath() / "broker/key.pem",
+            });
+         }()});
 
     auto authority = std::make_shared<Authority>(privateJwt);
 
