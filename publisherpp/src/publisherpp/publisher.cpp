@@ -19,7 +19,9 @@ namespace TunnelBore::Publisher
         , ws_{std::make_shared<Roar::WebsocketClient>(Roar::WebsocketClient::ConstructionArguments{
               .executor = exec,
               .sslContext =
-                  [] {
+                  [&cfg] -> std::optional<boost::asio::ssl::context> {
+                      if (!cfg.ssl)
+                          return std::nullopt;
                       boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
                       sslContext.set_verify_mode(boost::asio::ssl::verify_none);
                       sslContext.set_options(
@@ -61,7 +63,15 @@ namespace TunnelBore::Publisher
                 .verifyPeer(false)
                 .verifyHost(false)
                 .sink(authToken_)
-                .get("https://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+                //.get("https://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+                .get("http://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+
+        if (response.result() != 0)
+        {
+            spdlog::error("Curl error in authentication attempt: '{}'", response.result());
+            retryConnect();
+            return;
+        }
 
         if (response.code() != boost::beast::http::status::ok)
         {
@@ -269,7 +279,8 @@ namespace TunnelBore::Publisher
                                               .dump())
                                   .sink(body)
                                   .post(
-                                      "https://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
+                                      //"https://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
+                                      "http://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
                                       "/api/auth/sign-json");
 
         if (response.code() != boost::beast::http::status::ok)
