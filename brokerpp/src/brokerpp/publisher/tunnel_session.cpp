@@ -113,8 +113,8 @@ namespace TunnelBore::Broker
 
             if (ec)
             {
-                // TODO: what to do here?
-                // stop();
+                spdlog::warn("Inactivity timer for tunnel '{}' error: '{}'.", self->impl_->remoteAddress, ec.message());
+                self->close();
                 return;
             }
 
