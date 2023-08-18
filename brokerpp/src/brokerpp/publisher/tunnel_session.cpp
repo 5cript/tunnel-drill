@@ -274,6 +274,10 @@ namespace TunnelBore::Broker
                 [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t) {
                     if (ec)
                     {
+                        spdlog::warn(
+                            "Failed to write initial data to tunnel '{}', this will terminate this tunnel '{}'.",
+                            otherSelf->impl_->remoteAddress,
+                            self->impl_->remoteAddress);
                         self->close();
                         otherSelf->close();
                         return;
@@ -293,6 +297,10 @@ namespace TunnelBore::Broker
                 [self = shared_from_this(), otherSelf = other.shared_from_this()](auto const& ec, std::size_t) {
                     if (ec)
                     {
+                        spdlog::warn(
+                            "Failed to write initial data to tunnel '{}', this will terminate this tunnel '{}'.",
+                            self->impl_->remoteAddress,
+                            otherSelf->impl_->remoteAddress);
                         self->close();
                         otherSelf->close();
                         return;
