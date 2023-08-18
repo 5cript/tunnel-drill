@@ -67,14 +67,17 @@ int main(int argc, char** argv)
     const auto publicJwt = loadHomeFile("broker/jwt/public.key");
     const auto config = loadConfig();
 
+    if (!config.ssl)
+        spdlog::warn("SSL is disabled! This is only for testing purposes!");
+
     Roar::Server server(
         {.executor = pool.executor(),
          .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
             if (!config.ssl)
                 return std::nullopt;
             return Roar::makeSslContext({
-             .certificate = getHomePath() / "broker/cert.pem",
-             .privateKey = getHomePath() / "broker/key.pem",
+                .certificate = getHomePath() / "broker/cert.pem",
+                .privateKey = getHomePath() / "broker/key.pem",
             });
          }()});
 

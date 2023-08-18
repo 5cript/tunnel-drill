@@ -63,8 +63,7 @@ namespace TunnelBore::Publisher
                 .verifyPeer(false)
                 .verifyHost(false)
                 .sink(authToken_)
-                //.get("https://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
-                .get("http://"s + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+                .get("http"s + (cfg_.ssl ? "s" : "") + "://" + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
 
         if (response.result() != 0)
         {

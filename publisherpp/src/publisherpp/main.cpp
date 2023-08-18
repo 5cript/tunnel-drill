@@ -29,6 +29,10 @@ int main()
     spdlog::info("Config files are at '{}'", getHomePath().string());
 
     const auto config = loadConfig();
+
+    if (!config.ssl)
+        spdlog::warn("SSL is disabled! This is only for testing purposes!");
+
     auto publisher = std::make_shared<class Publisher>(pool.executor(), config);
     publisher->authenticate();
 

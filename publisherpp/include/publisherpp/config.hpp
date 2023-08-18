@@ -17,7 +17,7 @@ namespace TunnelBore::Publisher
         bool ssl = true;
     };
 
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, identity, passHashed, host, port, authorityHost, authorityPort, services)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, identity, passHashed, host, port, authorityHost, authorityPort, services, ssl)
 
     Config loadConfig();
     void saveConfig(Config const& config);
