@@ -16,20 +16,8 @@ namespace TunnelBore::Publisher
     // #####################################################################################################################
     Publisher::Publisher(boost::asio::any_io_executor exec, Config cfg)
         : cfg_{std::move(cfg)}
-        , ws_{std::make_shared<Roar::WebsocketClient>(Roar::WebsocketClient::ConstructionArguments{
-              .executor = exec,
-              .sslContext =
-                  [&cfg] -> std::optional<boost::asio::ssl::context> {
-                      if (!cfg.ssl)
-                          return std::nullopt;
-                      boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
-                      sslContext.set_verify_mode(boost::asio::ssl::verify_none);
-                      sslContext.set_options(
-                          boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::no_sslv2 |
-                          boost::asio::ssl::context::single_dh_use);
-                      return sslContext;
-                  }(),
-          })}
+        , exec_{exec}
+        , ws_{Publisher::createWebsocketClient(exec, cfg_)}
         , services_{[this, &exec]() {
             std::vector<std::shared_ptr<Service>> services;
             for (auto const& serviceInfo : cfg_.services)
@@ -53,6 +41,24 @@ namespace TunnelBore::Publisher
         , controlSendOperations_{}
         , sendInProgress_{false}
     {}
+    //---------------------------------------------------------------------------------------------------------------------
+    std::shared_ptr<Roar::WebsocketClient> Publisher::createWebsocketClient(boost::asio::any_io_executor exec, Config const& cfg)
+    {
+        return std::make_shared<Roar::WebsocketClient>(Roar::WebsocketClient::ConstructionArguments{
+              .executor = exec,
+              .sslContext =
+                  [&cfg] -> std::optional<boost::asio::ssl::context> {
+                      if (!cfg.ssl)
+                          return std::nullopt;
+                      boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
+                      sslContext.set_verify_mode(boost::asio::ssl::verify_none);
+                      sslContext.set_options(
+                          boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::no_sslv2 |
+                          boost::asio::ssl::context::single_dh_use);
+                      return sslContext;
+                  }(),
+          });
+    }
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::authenticate()
     {
@@ -114,6 +120,8 @@ namespace TunnelBore::Publisher
     void Publisher::connectToBroker()
     {
         spdlog::info("Connecting to broker control line '{}:{}'", cfg_.host, cfg_.port);
+        ws_ = Publisher::createWebsocketClient(exec_, cfg_);
+
         ws_->connect({
                          .host = cfg_.host,
                          .port = std::to_string(cfg_.port),

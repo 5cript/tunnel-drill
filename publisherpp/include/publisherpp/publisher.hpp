@@ -48,9 +48,11 @@ namespace TunnelBore::Publisher
             int hiddenPort,
             int publicPort,
             std::string const& socketType);
+        static std::shared_ptr<Roar::WebsocketClient> createWebsocketClient(boost::asio::any_io_executor exec, Config const& cfg);
 
       private:
         const Config cfg_;
+        boost::asio::any_io_executor exec_;
         std::shared_ptr<Roar::WebsocketClient> ws_;
         std::vector<std::shared_ptr<Service>> services_;
         std::string authToken_;
