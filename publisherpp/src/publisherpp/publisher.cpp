@@ -54,6 +54,7 @@ namespace TunnelBore::Publisher
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::authenticate()
     {
+        authToken_.clear();
         const auto response =
             Roar::Curl::Request{}
                 .basicAuth(cfg_.identity, cfg_.passHashed)
