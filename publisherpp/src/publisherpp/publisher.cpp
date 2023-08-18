@@ -68,7 +68,7 @@ namespace TunnelBore::Publisher
 
         if (response.result() != 0)
         {
-            spdlog::error("Curl error in authentication attempt: '{}'", response.result());
+            spdlog::error("Curl error in authentication attempt: '{}'", static_cast<int>(response.result()));
             retryConnect();
             return;
         }
