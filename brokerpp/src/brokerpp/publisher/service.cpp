@@ -158,6 +158,12 @@ namespace TunnelBore::Broker
                 if (ec)
                     return self->acceptOnce();
 
+                if (!socket->is_open())
+                {
+                    spdlog::warn("Socket is not open, but acceptor did not return an error.");
+                    return self->acceptOnce();
+                }
+
                 const auto tunnelId = self->impl_->uuidGenerator.generate_id();
                 spdlog::info(
                     "New connection accepted '{}' with tunnelId '{}'.",
@@ -167,8 +173,8 @@ namespace TunnelBore::Broker
                     std::scoped_lock sessionLock{self->impl_->sessionGuard};
                     auto tunnelSide =
                         std::make_shared<TunnelSession>(std::move(*socket), tunnelId, controlSession, self);
-                    tunnelSide->peek();
                     self->impl_->sessions[tunnelId] = std::move(tunnelSide);
+                    self->impl_->sessions[tunnelId]->peek();
                 }
 
                 self->acceptOnce();
