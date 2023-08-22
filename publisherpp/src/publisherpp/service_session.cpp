@@ -31,6 +31,7 @@ namespace TunnelBore::Publisher
     {}
     ServiceSession::~ServiceSession()
     {
+        spdlog::info("ServiceSession::~ServiceSession: closing session with {}", impl_->remoteAddress);
         close();
     }
     ServiceSession::ServiceSession(ServiceSession&&) = default;
@@ -43,6 +44,7 @@ namespace TunnelBore::Publisher
     void ServiceSession::close()
     {
         std::scoped_lock lock{impl_->mutex};
+        spdlog::info("ServiceSession::close: closing session with {}", impl_->remoteAddress);
         boost::system::error_code ec;
         impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
         if (ec && ec != boost::asio::error::not_connected)
@@ -67,6 +69,8 @@ namespace TunnelBore::Publisher
             auto session = weak.lock();
             if (!session)
                 return;
+
+            spdlog::info("ServiceSession::resetTimer: closing session due to inactivity with {}", session->remoteAddress());
             session->close();
         });
     }
