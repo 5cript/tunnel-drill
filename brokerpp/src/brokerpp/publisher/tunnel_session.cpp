@@ -7,6 +7,7 @@
 #include <sharedpp/printable_string.hpp>
 
 #include <spdlog/spdlog.h>
+#include <roar/utility/scope_exit.hpp>
 
 #include <iterator>
 #include <iostream>
