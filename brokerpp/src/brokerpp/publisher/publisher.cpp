@@ -55,7 +55,10 @@ namespace TunnelBore::Broker
     {
         auto session = controlSession.lock();
         if (!session)
+        {
+            spdlog::error("Control session is not alive anymore. Discarding handshake subscription.");
             return;
+        }
 
         impl_->controlSession = controlSession;
 
@@ -99,6 +102,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     bool Publisher::addService(ServiceInfo serviceInfo)
     {
+        spdlog::info("Adding service for '{}' with public port '{}'.", impl_->identity, serviceInfo.publicPort);
         auto returnResult = [this](bool result) {
             if (auto controlSession = impl_->controlSession.lock(); controlSession)
                 controlSession->writeJson(json{{"type", "ServiceStartResult"}, {"result", result}});

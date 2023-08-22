@@ -110,7 +110,10 @@ namespace TunnelBore::Broker
 
                 auto self = weak.lock();
                 if (!self)
+                {
+                    spdlog::warn("Tunnel is gone in inactivity timer timeout");
                     return;
+                }
 
                 if (ec)
                 {
@@ -146,13 +149,26 @@ namespace TunnelBore::Broker
             impl_->socket.async_read_some(
                 boost::asio::buffer(impl_->peekBuffer, impl_->peekBuffer.size()),
                 [weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytesTransferred) {
+                    auto exitLog = Roar::ScopeExit{[]() { spdlog::info("Peek read finished."); }};
+
+                    spdlog::info("Peek read for tunnel side of size '{}'.", bytesTransferred);
+
                     auto self = weak.lock();
                     if (!self)
+                    {
+                        spdlog::warn("Tunnel is gone in peek read");
                         return;
+                    }
 
                     auto service = self->impl_->service.lock();
                     if (!service)
+                    {
+                        spdlog::warn(
+                            "Missing service for new tunnel session, this will terminate this tunnel '{}'",
+                            self->impl_->remoteAddress);
+                        self->close();
                         return;
+                    }
 
                     auto info = service->info();
 
@@ -180,7 +196,21 @@ namespace TunnelBore::Broker
                         return;
                     }
 
-                    if (bytesTransferred > 0 && self->impl_->peekBuffer.starts_with(publisherToBrokerPrefix))
+                    if (bytesTransferred == 0)
+                    {
+                        spdlog::warn(
+                            "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this side "
+                            "of the tunnel '{}': '{}'",
+                            info.name ? *info.name : "noname",
+                            info.publicPort,
+                            info.hiddenPort,
+                            self->impl_->remoteAddress,
+                            "No bytes transferred");
+                        self->close();
+                        return;
+                    }
+
+                    if (self->impl_->peekBuffer.starts_with(publisherToBrokerPrefix))
                     {
                         try
                         {
@@ -255,6 +285,7 @@ namespace TunnelBore::Broker
 
                     // assume this is not json from the publisher side.
                     self->impl_->isPublisherSide = false;
+                    spdlog::info("Informing publisher about connection");
                     controlSession->informAboutConnection(service->serviceId(), self->impl_->tunnelId);
                 });
         } catch (std::exception const& exc) {

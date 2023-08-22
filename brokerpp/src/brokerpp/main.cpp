@@ -8,13 +8,14 @@
 
 #include <roar/server.hpp>
 #include <roar/ssl/make_ssl_context.hpp>
+#include <roar/utility/scope_exit.hpp>
+#include <roar/utility/shutdown_barrier.hpp>
+#include <roar/filesystem/special_paths.hpp>
 
 #include <spdlog/spdlog.h>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <roar/utility/scope_exit.hpp>
-#include <roar/utility/shutdown_barrier.hpp>
 
 #include <iostream>
 #include <chrono>
@@ -44,6 +45,18 @@ int main(int argc, char** argv)
 #if __linux__
     signal(SIGSEGV, signalHandler);
 #endif
+
+    std::vector<spdlog::sink_ptr> sinks;
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
+    sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>("logfile", 23, 59));
+    auto combined_logger = std::make_shared<spdlog::logger>(
+        "name", 
+        Roar::resolvePath("~/.tbore/broker/logs").string(), 
+        begin(sinks), 
+        end(sinks)
+    );
+    //register it if you need to access it globally
+    spdlog::register_logger(combined_logger);
 
     using namespace TunnelBore;
     using namespace TunnelBore::Broker;
