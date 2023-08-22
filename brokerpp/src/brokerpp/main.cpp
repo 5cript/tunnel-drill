@@ -50,10 +50,13 @@ int main(int argc, char** argv)
 
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
-    sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>("logfile", 23, 59));
+    sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
+        Roar::resolvePath("~/.tbore/broker/logs/log").string(),
+        23, 
+        59
+    ));
     auto combined_logger = std::make_shared<spdlog::logger>(
         "name", 
-        Roar::resolvePath("~/.tbore/broker/logs").string(), 
         begin(sinks), 
         end(sinks)
     );
