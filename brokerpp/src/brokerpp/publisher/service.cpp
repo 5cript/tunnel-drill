@@ -7,6 +7,8 @@
 #include <sharedpp/uuid_generator.hpp>
 #include <spdlog/spdlog.h>
 
+#include <roar/utility/scope_exit.hpp>
+
 #include <mutex>
 #include <shared_mutex>
 
