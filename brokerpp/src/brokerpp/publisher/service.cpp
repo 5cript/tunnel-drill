@@ -145,7 +145,10 @@ namespace TunnelBore::Broker
 
         impl_->acceptor.async_accept(
             *socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
-                const auto acceptorExitLog = Roar::ScopeExit{[]() {
+                const auto acceptorExitLog = Roar::ScopeExit{[weak]() {
+                    auto self = weak.lock();
+                    if (!self)
+                        return;
                     spdlog::info("[Service '{}']: Accepting connection finished.", self->impl_->serviceId);
                 }};
 
