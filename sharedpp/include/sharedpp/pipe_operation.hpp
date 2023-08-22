@@ -55,12 +55,24 @@ namespace TunnelBore
                     operation->write(bytesTransferred, ec.operator bool());
                 });
         }
-        void write(std::size_t bytesTransferred, bool close)
+        void write(std::size_t bytesTransferred, bool close, std::size_t cumulativeOffset = 0, int retries = 0)
         {
             auto sideOther = sideOther_.lock();
             if (!sideOther)
                 return;
             sideOther->resetTimer();
+
+            if (retries > 10)
+            {
+                spdlog::error("Too many retries, killing pipe");
+                auto sideOriginal = sideOriginal_.lock();
+
+                if (sideOriginal)
+                    sideOriginal->close();
+                if (sideOther)
+                    sideOther->close();
+                return;
+            }
 
             if (bytesTransferred > buffer_.size() || bytesTransferred == 0)
             {
@@ -77,19 +89,40 @@ namespace TunnelBore
 
             boost::asio::async_write(
                 sideOther->socket(),
-                boost::asio::buffer(buffer_, bytesTransferred),
-                [operation = this->shared_from_this(), close, expectedWrittenAmount = bytesTransferred](auto const& ec, std::size_t bytesWritten) {
+                boost::asio::buffer(buffer_.data() + cumulativeOffset, bytesTransferred),
+                [
+                    operation = this->shared_from_this(), 
+                    close, 
+                    expectedWrittenAmount = bytesTransferred, 
+                    cumulativeOffset,
+                    retries
+                ](auto const& ec, std::size_t bytesWritten) {
                     auto sideOriginal = operation->sideOriginal_.lock();
                     auto sideOther = operation->sideOther_.lock();
 
-                    if (expectedWrittenAmount != bytesWritten)
+                    if (bytesWritten > expectedWrittenAmount)
                     {
-                        spdlog::error("bytesWritten is not equal to bytesTransferred, killing pipe: expected {} != written {}", expectedWrittenAmount, bytesWritten);
-
+                        spdlog::error("bytesWritten is too large, killing pipe: {}", bytesWritten);
                         if (sideOriginal)
                             sideOriginal->close();
                         if (sideOther)
                             sideOther->close();
+                        return;
+                    }
+
+                    if (expectedWrittenAmount != bytesWritten)
+                    {
+                        spdlog::warn(
+                            "Expected to write {} bytes, but only wrote {} bytes, retrying", 
+                            expectedWrittenAmount, 
+                            bytesWritten
+                        );
+                        operation->write(
+                            expectedWrittenAmount - bytesWritten, 
+                            close, 
+                            cumulativeOffset + bytesWritten, 
+                            retries + 1
+                        );
                         return;
                     }
 
