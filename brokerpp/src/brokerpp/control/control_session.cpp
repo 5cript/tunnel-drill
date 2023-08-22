@@ -7,6 +7,8 @@
 #include <brokerpp/control/stream_parser.hpp>
 #include <brokerpp/publisher/publisher.hpp>
 
+#include <roar/utility/scope_exit.hpp>
+
 #include <spdlog/spdlog.h>
 
 #include <string>
@@ -158,21 +160,39 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onRead(Roar::WebsocketReadResult const& readResult)
     {
+        spdlog::info("Control session '{}' received {} bytes.", impl_->identity, readResult.message.size());
+
+        bool abortReading = false;
+        auto readAgain = Roar::ScopeExit{[weak = weak_from_this(), &abortReading]() {
+            if (abortReading)
+                return;
+
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            // Read again
+            self->doRead();
+        }};
+
         if (!readResult.isBinary)
         {
             impl_->textParser.feed(readResult.message);
             const auto popped = impl_->textParser.popMessage();
             if (!popped)
+            {
+                spdlog::info("No message popped from parser.");
                 return;
+            }
 
             std::string ref = "";
             if (!popped->contains("ref"))
                 spdlog::warn("Message lacks ref, cannot reply with ref.");
             else
-                ref = (*popped)["ref"];
+                ref = (*popped)["ref"].get<std::string>();
 
             if (!popped->contains("type"))
-                return respondWithError((*popped)["ref"].get<std::string>(), "Type missing in message.");
+                return respondWithError(ref, "Type missing in message.");
 
             spdlog::info("'{}': Message '{}' received", impl_->identity, (*popped)["type"].get<std::string>());
 
@@ -184,15 +204,14 @@ namespace TunnelBore::Broker
             {
                 spdlog::error("Error in json consumer: {}", exc.what());
                 impl_->endSelf();
+                abortReading = true;
+                return;
             }
         }
         else
         {
             spdlog::warn("Binary received on control connection, which is ignored.");
         }
-
-        // Restart reading:
-        doRead();
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::shared_ptr<Publisher> ControlSession::getAssociatedPublisher()
@@ -206,6 +225,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onJson(json const& j, std::string const& ref)
     {
+        spdlog::info("Control session '{}' received json message.", impl_->identity);
         return impl_->dispatcher.dispatch(j, ref);
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -234,12 +254,15 @@ namespace TunnelBore::Broker
         std::scoped_lock writeLock{impl_->writeGuard};
         if (impl_->pendingMessages.empty())
         {
+            spdlog::info("No more messages to write on control session.");
             impl_->writeInProgress = false;
             return;
         }
         impl_->writeInProgress = true;
 
-        auto msg = impl_->pendingMessages.front();
+        const auto msg = impl_->pendingMessages.front();
+        impl_->pendingMessages.pop_front();
+
         spdlog::info(
             "Writing message to control session: '{}'",
             msg.payload.substr(0, std::min(msg.payload.size(), static_cast<std::size_t>(100))));
@@ -248,25 +271,30 @@ namespace TunnelBore::Broker
             .then([weak = weak_from_this()](std::size_t) {
                 auto self = weak.lock();
                 if (!self)
+                {
+                    spdlog::error("Control session is gone, cannot send message.");
                     return;
+                }
 
                 self->writeOnce();
             })
             .fail([weak = weak_from_this()](Roar::Error const& error) {
                 auto self = weak.lock();
                 if (!self)
+                {
+                    spdlog::error("Control session is gone, cannot react to send failure.");
                     return;
+                }
 
                 spdlog::error("Failed to send message: {}", error.toString());
                 self->impl_->endSelf();
             });
-
-        if (!impl_->pendingMessages.empty())
-            impl_->pendingMessages.pop_front();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::writeJson(json const& j)
     {
+        spdlog::info("Writing json on control session");
+
         std::scoped_lock writeLock{impl_->writeGuard};
         impl_->pendingMessages.push_back({j.dump()});
 
@@ -278,6 +306,7 @@ namespace TunnelBore::Broker
         std::string const& type,
         std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback)
     {
+        spdlog::info("Subscribing to '{}' on control session.", type);
         impl_->subscriptions.push_back(impl_->dispatcher.subscribe(type, callback));
     }
     // #####################################################################################################################
