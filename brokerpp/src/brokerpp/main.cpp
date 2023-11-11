@@ -90,8 +90,6 @@ int main(int argc, char** argv)
     if (!config.ssl)
         spdlog::warn("SSL is disabled! This is only for testing purposes!");
 
-    Roar::SslServerContext sslContext;
-    Roar::initializeServerSslContext(sslContext);
     Roar::Server server(
         {.executor = pool.executor(), .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
              if (!config.ssl)
