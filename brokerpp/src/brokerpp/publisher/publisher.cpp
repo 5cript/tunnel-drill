@@ -9,6 +9,7 @@
 
 #include <string>
 #include <mutex>
+#include <map>
 
 using namespace std::literals;
 
@@ -21,7 +22,7 @@ namespace TunnelBore::Broker
         uuid_generator uuidGenerator;
         std::string identity;
         std::recursive_mutex serviceGuard;
-        std::unordered_map<std::string, std::shared_ptr<Service>> services;
+        std::map<std::string, std::shared_ptr<Service>> services;
         std::weak_ptr<ControlSession> controlSession;
 
         Implementation(boost::asio::any_io_executor executor, std::string identity)
@@ -126,6 +127,33 @@ namespace TunnelBore::Broker
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
+    std::vector<std::string> Publisher::getServiceIds() const
+    {
+        std::scoped_lock lock{impl_->serviceGuard};
+        std::vector<std::string> result;
+        result.reserve(impl_->services.size());
+        for (auto const& [serviceId, service] : impl_->services)
+            result.push_back(serviceId);
+        return result;
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::size_t Publisher::removeService(std::string const& id)
+    {
+        std::scoped_lock lock{impl_->serviceGuard};
+        auto iter = impl_->services.find(id);
+        if (iter == impl_->services.end())
+            return 0;
+        iter->second->stop();
+        return impl_->services.erase(iter), 1;
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void Publisher::detachControlSession(bool eraseServices)
+    {
+        impl_->controlSession.reset();
+        if (eraseServices)
+            clearServices();
+    }
+    //---------------------------------------------------------------------------------------------------------------------
     bool Publisher::addService(ServiceInfo serviceInfo)
     {
         spdlog::info("Adding service for '{}' with public port '{}'.", impl_->identity, serviceInfo.publicPort);
@@ -151,8 +179,17 @@ namespace TunnelBore::Broker
             }
         }
 
+        std::size_t eraseCounter = 0;
         for (auto const& serviceId : recreatedServices)
-            impl_->services.erase(serviceId);
+        {
+            eraseCounter += removeService(serviceId);
+        }
+        if (eraseCounter != recreatedServices.size())
+        {
+            spdlog::error(
+                "Could not erase all services for '{}' with public port '{}'", impl_->identity, serviceInfo.publicPort);
+            return returnResult(false);
+        }
 
         const auto serviceId = impl_->uuidGenerator.generate_id();
         auto service = std::make_shared<Service>(
@@ -170,7 +207,7 @@ namespace TunnelBore::Broker
             return returnResult(false);
         }
         spdlog::info("Added service for '{}' with public port '{}'.", impl_->identity, serviceInfo.publicPort);
-        impl_->services[serviceId] = std::move(service);
+        impl_->services[serviceId] = service;
         return returnResult(true);
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -181,14 +218,14 @@ namespace TunnelBore::Broker
             addService(serviceInfo);
     }
     //---------------------------------------------------------------------------------------------------------------------
-    std::shared_ptr<Service> Publisher::getService(std::string const& id)
+    Service* Publisher::getService(std::string const& id)
     {
         std::scoped_lock lock{impl_->serviceGuard};
         auto iter = impl_->services.find(id);
         if (iter == impl_->services.end())
-            return {};
+            return nullptr;
         else
-            return iter->second;
+            return &*iter->second;
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::clearServices()

@@ -22,8 +22,11 @@ namespace TunnelBore::Broker
 
         void setCurrentControlSession(std::weak_ptr<ControlSession> controlSession);
         std::weak_ptr<ControlSession> getCurrentControlSession();
+        void detachControlSession(bool eraseServices);
 
-        std::shared_ptr<Service> getService(std::string const& id);
+        Service* getService(std::string const& id);
+        std::vector<std::string> getServiceIds() const;
+        std::size_t removeService(std::string const& id);
 
         bool addService(ServiceInfo serviceInfo);
 

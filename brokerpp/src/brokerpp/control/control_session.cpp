@@ -140,7 +140,7 @@ namespace TunnelBore::Broker
     {
         auto publisher = getAssociatedPublisher();
         auto service = publisher->getService(serviceId);
-        if (!service)
+        if (service == nullptr)
         {
             spdlog::error("Service with id '{}' not found", serviceId);
             return; // TODO: handle error
@@ -255,6 +255,11 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     ControlSession::~ControlSession()
     {
+        auto publisher = getAssociatedPublisher();
+        if (publisher)
+            publisher->detachControlSession(true);
+        else
+            spdlog::error("Publisher is gone, cannot detach control session.");
         spdlog::info("Control session '{}' destroyed.", impl_->identity);
     }
     //---------------------------------------------------------------------------------------------------------------------

@@ -155,7 +155,7 @@ namespace TunnelBore::Broker
                 auto self = weak.lock();
                 if (!self)
                 {
-                    spdlog::warn("Service '{}' is gone, cannot accept new connections.",  self->impl_->serviceId);
+                    spdlog::warn("Service is gone, cannot accept new connections.");
                     return;
                 }
 
@@ -208,7 +208,7 @@ namespace TunnelBore::Broker
                 {
                     std::scoped_lock sessionLock{self->impl_->sessionGuard};
                     auto tunnelSide =
-                        std::make_shared<TunnelSession>(std::move(*socket), tunnelId, controlSession, self);
+                        std::make_shared<TunnelSession>(std::move(*socket), tunnelId, controlSession, self->weak_from_this());
                     self->impl_->sessions[tunnelId] = std::move(tunnelSide);
                     self->impl_->sessions[tunnelId]->peek();
                 }
