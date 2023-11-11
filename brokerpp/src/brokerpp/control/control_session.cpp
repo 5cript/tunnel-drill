@@ -160,7 +160,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onRead(Roar::WebsocketReadResult const& readResult)
     {
-        spdlog::info("Control session '{}' received {} bytes.", impl_->identity, readResult.message.size());
+        spdlog::debug("Control session '{}' received {} bytes.", impl_->identity, readResult.message.size());
 
         bool abortReading = false;
         auto readAgain = Roar::ScopeExit{[weak = weak_from_this(), &abortReading]() {
@@ -194,7 +194,9 @@ namespace TunnelBore::Broker
             if (!popped->contains("type"))
                 return respondWithError(ref, "Type missing in message.");
 
-            spdlog::info("'{}': Message '{}' received", impl_->identity, (*popped)["type"].get<std::string>());
+            const auto msgType = (*popped)["type"].get<std::string>();
+            if (msgType != "Ping")
+                spdlog::info("'{}': Message '{}' received", impl_->identity, msgType);
 
             try
             {
@@ -225,8 +227,20 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::onJson(json const& j, std::string const& ref)
     {
-        spdlog::info("Control session '{}' received json message.", impl_->identity);
+        if (!j.contains("type") || j["type"].get<std::string>() != "Ping")
+            spdlog::info("Control session '{}' received json message.", impl_->identity);
         return impl_->dispatcher.dispatch(j, ref);
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    void ControlSession::respond(std::string const& ref, json const& j)
+    {
+        std::string type = j.contains("type") ? j["type"].get<std::string>() : "GenericResponse";
+
+        writeJson(json{
+            {"type", type},
+            {"ref", ref},
+            {"payload", j},
+        });
     }
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::respondWithError(std::string const& ref, std::string const& msg)
@@ -254,7 +268,7 @@ namespace TunnelBore::Broker
         std::scoped_lock writeLock{impl_->writeGuard};
         if (impl_->pendingMessages.empty())
         {
-            spdlog::info("No more messages to write on control session.");
+            spdlog::debug("No more messages to write on control session.");
             impl_->writeInProgress = false;
             return;
         }
@@ -263,7 +277,7 @@ namespace TunnelBore::Broker
         const auto msg = impl_->pendingMessages.front();
         impl_->pendingMessages.pop_front();
 
-        spdlog::info(
+        spdlog::debug(
             "Writing message to control session: '{}'",
             msg.payload.substr(0, std::min(msg.payload.size(), static_cast<std::size_t>(100))));
 
@@ -293,7 +307,8 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void ControlSession::writeJson(json const& j)
     {
-        spdlog::info("Writing json on control session");
+        if (!j.contains("type") || j["type"].get<std::string>() != "Pong")
+            spdlog::info("Writing json on control session");
 
         std::scoped_lock writeLock{impl_->writeGuard};
         impl_->pendingMessages.push_back({j.dump()});

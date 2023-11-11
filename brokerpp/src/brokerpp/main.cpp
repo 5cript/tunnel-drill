@@ -51,9 +51,24 @@ int main(int argc, char** argv)
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
     sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
+<<<<<<< Updated upstream
         Roar::resolvePath("~/.tbore/broker/logs/log").string(), 23, 59));
     auto combined_logger = std::make_shared<spdlog::logger>("name", begin(sinks), end(sinks));
     // register it if you need to access it globally
+=======
+        Roar::resolvePath("~/.tbore/broker/logs/log").string(),
+        23,
+        59
+    ));
+    auto combined_logger = std::make_shared<spdlog::logger>(
+        "name",
+        begin(sinks),
+        end(sinks)
+    );
+    combined_logger->flush_on(spdlog::level::info);
+    combined_logger->set_level(spdlog::level::info);
+    //register it if you need to access it globally
+>>>>>>> Stashed changes
     spdlog::register_logger(combined_logger);
 
     using namespace TunnelBore;
@@ -81,11 +96,21 @@ int main(int argc, char** argv)
     if (!config.ssl)
         spdlog::warn("SSL is disabled! This is only for testing purposes!");
 
+    Roar::SslServerContext sslContext;
+    Roar::initializeServerSslContext(sslContext);
     Roar::Server server(
+<<<<<<< Updated upstream
         {.executor = pool.executor(), .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
              if (!config.ssl)
                  return std::nullopt;
              return Roar::makeSslContext(getHomePath() / "broker/cert.pem", getHomePath() / "broker/key.pem");
+=======
+        {.executor = pool.executor(),
+         .sslContext = [&config ,&sslContext]() -> std::optional<boost::asio::ssl::context> {
+            if (!config.ssl)
+                return std::nullopt;
+            return sslContext;
+>>>>>>> Stashed changes
          }()});
 
     auto authority = std::make_shared<Authority>(privateJwt);

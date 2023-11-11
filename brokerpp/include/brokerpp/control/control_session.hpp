@@ -42,6 +42,7 @@ namespace TunnelBore::Broker
             std::function<bool(Subscription::ParameterType const&, std::string const&)> const& callback);
         boost::asio::ip::tcp::endpoint remoteEndpoint() const;
         void respondWithError(std::string const& ref, std::string const& msg);
+        void respond(std::string const& ref, json const& j);
 
       private:
         void onRead(Roar::WebsocketReadResult const& readResult);

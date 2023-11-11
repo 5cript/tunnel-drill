@@ -64,7 +64,7 @@ namespace TunnelBore::Broker
 
         // Note to myself: dont capture session here, or it would be indefinitely kept alive.
         session->subscribe(
-            "Handshake", [weak = weak_from_this(), controlSession](json const& j, std::string const& ref) {
+            "Handshake", [weak = weak_from_this(), controlSession = session->weak_from_this()](json const& j, std::string const& ref) {
                 spdlog::info("Publisher handshake received.");
 
                 auto shared = weak.lock();
@@ -97,6 +97,32 @@ namespace TunnelBore::Broker
                     return session->respondWithError(ref, "Exception during handshake parsing: "s + exc.what()), false;
                 }
                 return true;
+            });
+
+        session->subscribe(
+            "Ping", [weak = weak_from_this(), controlSession = session->weak_from_this(), pingCounter = 0](json const&, std::string const& ref) mutable{
+                if (pingCounter == 0)
+                {
+                    spdlog::info("Ping received first or a thousandth time.");
+                }
+                ++pingCounter;
+                if (pingCounter % 1000 == 0)
+                    pingCounter = 0;
+
+                auto shared = weak.lock();
+                if (!shared)
+                {
+                    spdlog::info("Publisher is not alive anymore. Discarding ping.");
+                    return true;
+                }
+                auto session = controlSession.lock();
+                if (!session)
+                {
+                    spdlog::info("Control session is not alive anymore. Discarding ping.");
+                    return true;
+                }
+
+                return session->respond(ref, json{{"type", "Pong"}}), true;
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
