@@ -37,39 +37,41 @@ namespace TunnelBore::Publisher
         , reconnectTime_{1}
         , isReconnecting_{false}
         , reconnectMutex_{}
+        , pingAliveTimer_{exec}
         , controlSendQueueMutex_{}
         , controlSendOperations_{}
         , sendInProgress_{false}
     {}
     //---------------------------------------------------------------------------------------------------------------------
-    std::shared_ptr<Roar::WebsocketClient> Publisher::createWebsocketClient(boost::asio::any_io_executor exec, Config const& cfg)
+    std::shared_ptr<Roar::WebsocketClient>
+    Publisher::createWebsocketClient(boost::asio::any_io_executor exec, Config const& cfg)
     {
         return std::make_shared<Roar::WebsocketClient>(Roar::WebsocketClient::ConstructionArguments{
-              .executor = exec,
-              .sslContext =
-                  [&cfg] -> std::optional<boost::asio::ssl::context> {
-                      if (!cfg.ssl)
-                          return std::nullopt;
-                      boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
-                      sslContext.set_verify_mode(boost::asio::ssl::verify_none);
-                      sslContext.set_options(
-                          boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::no_sslv2 |
-                          boost::asio::ssl::context::single_dh_use);
-                      return sslContext;
-                  }(),
-          });
+            .executor = exec,
+            .sslContext = [&cfg] -> std::optional<boost::asio::ssl::context> {
+                if (!cfg.ssl)
+                    return std::nullopt;
+                boost::asio::ssl::context sslContext{boost::asio::ssl::context::tlsv13_client};
+                sslContext.set_verify_mode(boost::asio::ssl::verify_none);
+                sslContext.set_options(
+                    boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::no_sslv2 |
+                    boost::asio::ssl::context::single_dh_use);
+                return sslContext;
+            }(),
+        });
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::authenticate()
     {
         authToken_.clear();
-        const auto response =
-            Roar::Curl::Request{}
-                .basicAuth(cfg_.identity, cfg_.passHashed)
-                .verifyPeer(false)
-                .verifyHost(false)
-                .sink(authToken_)
-                .get("http"s + (cfg_.ssl ? "s" : "") + "://" + cfg_.authorityHost + ":"s + std::to_string(cfg_.authorityPort) + "/api/auth"s);
+        const auto response = Roar::Curl::Request{}
+                                  .basicAuth(cfg_.identity, cfg_.passHashed)
+                                  .verifyPeer(false)
+                                  .verifyHost(false)
+                                  .sink(authToken_)
+                                  .get(
+                                      "http"s + (cfg_.ssl ? "s" : "") + "://" + cfg_.authorityHost + ":"s +
+                                      std::to_string(cfg_.authorityPort) + "/api/auth"s);
 
         if (response.result() != 0)
         {
@@ -80,7 +82,8 @@ namespace TunnelBore::Publisher
 
         if (response.code() != boost::beast::http::status::ok)
         {
-            spdlog::error("Failed to authenticate with the authority. Response code: {}", static_cast<int>(response.code()));
+            spdlog::error(
+                "Failed to authenticate with the authority. Response code: {}", static_cast<int>(response.code()));
             retryConnect();
             return;
         }
@@ -94,8 +97,15 @@ namespace TunnelBore::Publisher
     void Publisher::retryConnect()
     {
         std::scoped_lock lock{reconnectMutex_};
+        stopAliveTimer();
         if (isReconnecting_)
+        {
+            spdlog::info("Already reconnecting, ignoring retry request");
             return;
+        }
+        // close first:
+        ws_->close();
+
         spdlog::info("Retrying connection in {} seconds", reconnectTime_.count());
         isReconnecting_ = true;
         reconnectTimer_.expires_from_now(boost::posix_time::seconds(reconnectTime_.count()));
@@ -108,13 +118,11 @@ namespace TunnelBore::Publisher
             auto self = weak.lock();
             if (!self)
                 return;
-            
+
             std::scoped_lock lock{self->reconnectMutex_};
             self->isReconnecting_ = false;
             self->authenticate();
         });
-        
-        connectToBroker();
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Publisher::connectToBroker()
@@ -140,6 +148,7 @@ namespace TunnelBore::Publisher
                 spdlog::info("Connected to broker control line");
                 {
                     std::scoped_lock lock{self->reconnectMutex_};
+                    self->startAliveTimer();
                     self->reconnectTime_ = 1s;
                 }
                 self->doControlReading();
@@ -152,10 +161,30 @@ namespace TunnelBore::Publisher
                 auto self = weak.lock();
                 if (!self)
                     return;
-                self->retryConnect(); 
+                self->retryConnect();
             });
     }
-    //---------------------------------------------------------------------------------------------------------------------
+    //--------------------------------------------------------------------------------------------------------------------
+    void Publisher::stopAliveTimer()
+    {
+        pingAliveTimer_.cancel();
+    }
+    //--------------------------------------------------------------------------------------------------------------------
+    void Publisher::startAliveTimer()
+    {
+        pingAliveTimer_.expires_from_now(boost::posix_time::seconds{1});
+        pingAliveTimer_.async_wait([weak = weak_from_this()](boost::system::error_code ec) {
+            if (ec)
+                return;
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            self->sendQueued({{"type", "Ping"}, {"ref", "Ping"}});
+            self->startAliveTimer();
+        });
+    }
+    //--------------------------------------------------------------------------------------------------------------------
     void Publisher::doControlReading()
     {
         ws_->read()
@@ -199,8 +228,12 @@ namespace TunnelBore::Publisher
 
                 self->sendOnceFromQueue();
             })
-            .fail([](auto const& err) {
+            .fail([weak = weak_from_this()](auto const& err) {
                 spdlog::error("Failed to send to broker: '{}'", err.toString());
+                auto self = weak.lock();
+                if (!self)
+                    return;
+                self->retryConnect();
             });
     }
     //---------------------------------------------------------------------------------------------------------------------
@@ -235,6 +268,10 @@ namespace TunnelBore::Publisher
             const auto result = j["result"].get<bool>();
             if (!result)
                 spdlog::error("Failed to start service: {}", j.dump());
+        }
+        else if (type == "Pong")
+        {
+            // ignore to avoid logspam
         }
         else
         {
@@ -274,21 +311,21 @@ namespace TunnelBore::Publisher
         }
 
         std::string body;
-        const auto response = Roar::Curl::Request{}
-                                  .verifyPeer(false)
-                                  .verifyHost(false)
-                                  .basicAuth(cfg_.identity, cfg_.passHashed)
-                                  .source(json{
-                                      {"tunnelId", tunnelId},
-                                      {"serviceId", serviceId},
-                                      {"hiddenPort", hiddenPort},
-                                      {"publicPort", publicPort}}
-                                              .dump())
-                                  .sink(body)
-                                  .post(
-                                      //"https://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
-                                      "http://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
-                                      "/api/auth/sign-json");
+        const auto response =
+            Roar::Curl::Request{}
+                .verifyPeer(false)
+                .verifyHost(false)
+                .basicAuth(cfg_.identity, cfg_.passHashed)
+                .source(json{
+                    {"tunnelId", tunnelId},
+                    {"serviceId", serviceId},
+                    {"hiddenPort", hiddenPort},
+                    {"publicPort", publicPort}}
+                            .dump())
+                .sink(body)
+                .post(
+                    //"https://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) +
+                    "http://"s + cfg_.authorityHost + ":" + std::to_string(cfg_.authorityPort) + "/api/auth/sign-json");
 
         if (response.code() != boost::beast::http::status::ok)
         {

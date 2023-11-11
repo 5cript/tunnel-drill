@@ -42,6 +42,8 @@ namespace TunnelBore::Publisher
         void onControlRead(Roar::WebsocketReadResult message);
         void sendQueued(json&& j);
         void sendOnceFromQueue();
+        void startAliveTimer();
+        void stopAliveTimer();
         void onNewTunnel(
             std::string const& serviceId,
             std::string const& tunnelId,
@@ -57,12 +59,15 @@ namespace TunnelBore::Publisher
         std::vector<std::shared_ptr<Service>> services_;
         std::string authToken_;
         std::chrono::system_clock::time_point tokenCreationTime_;
-        
+
         // reconnect related
         boost::asio::deadline_timer reconnectTimer_;
         std::chrono::seconds reconnectTime_;
         bool isReconnecting_;
         std::recursive_mutex reconnectMutex_;
+
+        // alive tester
+        boost::asio::deadline_timer pingAliveTimer_;
 
         // send queue related
         std::recursive_mutex controlSendQueueMutex_;

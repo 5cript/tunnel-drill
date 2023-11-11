@@ -51,16 +51,9 @@ int main(int argc, char** argv)
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
     sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
-        Roar::resolvePath("~/.tbore/broker/logs/log").string(),
-        23, 
-        59
-    ));
-    auto combined_logger = std::make_shared<spdlog::logger>(
-        "name", 
-        begin(sinks), 
-        end(sinks)
-    );
-    //register it if you need to access it globally
+        Roar::resolvePath("~/.tbore/broker/logs/log").string(), 23, 59));
+    auto combined_logger = std::make_shared<spdlog::logger>("name", begin(sinks), end(sinks));
+    // register it if you need to access it globally
     spdlog::register_logger(combined_logger);
 
     using namespace TunnelBore;
@@ -89,14 +82,10 @@ int main(int argc, char** argv)
         spdlog::warn("SSL is disabled! This is only for testing purposes!");
 
     Roar::Server server(
-        {.executor = pool.executor(),
-         .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
-            if (!config.ssl)
-                return std::nullopt;
-            return Roar::makeSslContext({
-                .certificate = getHomePath() / "broker/cert.pem",
-                .privateKey = getHomePath() / "broker/key.pem",
-            });
+        {.executor = pool.executor(), .sslContext = [&config]() -> std::optional<boost::asio::ssl::context> {
+             if (!config.ssl)
+                 return std::nullopt;
+             return Roar::makeSslContext(getHomePath() / "broker/cert.pem", getHomePath() / "broker/key.pem");
          }()});
 
     auto authority = std::make_shared<Authority>(privateJwt);

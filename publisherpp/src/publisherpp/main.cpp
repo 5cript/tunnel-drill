@@ -6,7 +6,11 @@
 #include <sharedpp/load_home_file.hpp>
 #include <roar/utility/scope_exit.hpp>
 #include <roar/utility/shutdown_barrier.hpp>
+#include <roar/filesystem/special_paths.hpp>
+
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/daily_file_sink.h>
+#include <spdlog/sinks/stdout_sinks.h>
 
 #include <iostream>
 
@@ -19,6 +23,23 @@ int main()
     using namespace std::string_literals;
 
     setupHome();
+
+    std::vector<spdlog::sink_ptr> sinks;
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
+    sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
+        Roar::resolvePath("~/.tbore/publisher/logs/log").string(),
+        23,
+        59
+    ));
+    auto combined_logger = std::make_shared<spdlog::logger>(
+        "name",
+        begin(sinks),
+        end(sinks)
+    );
+    spdlog::register_logger(combined_logger);
+    spdlog::flush_on(spdlog::level::warn);
+    spdlog::set_level(spdlog::level::info);
+    spdlog::flush_every(std::chrono::seconds(10));
 
     boost::asio::thread_pool pool{IoContextThreadPoolSize};
     const auto shutdownPool = Roar::ScopeExit{[&pool]() {
@@ -41,4 +62,5 @@ int main()
     std::cin.get();
 
     spdlog::info("Shutting down...");
+    spdlog::shutdown();
 }
