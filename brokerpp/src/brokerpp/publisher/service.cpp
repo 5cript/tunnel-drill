@@ -148,6 +148,12 @@ namespace TunnelBore::Broker
         }
         spdlog::info("[Service '{}']: Accepting connection.", impl_->serviceId);
         impl_->acceptor.async_accept(*socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
+            if (ec == boost::asio::error::operation_aborted)
+            {
+                spdlog::info("Service acceptor was stopped.");
+                return;
+            }
+
             const auto acceptorExitLog = Roar::ScopeExit{[weak]() {
                 auto self = weak.lock();
                 if (!self)
@@ -159,12 +165,6 @@ namespace TunnelBore::Broker
             if (!self)
             {
                 spdlog::warn("Service is gone, cannot accept new connections.");
-                return;
-            }
-
-            if (ec == boost::asio::error::operation_aborted)
-            {
-                spdlog::info("[Service '{}']: Acceptor was stopped.", self->impl_->serviceId);
                 return;
             }
 
