@@ -2,6 +2,7 @@
 
 #include <boost/asio.hpp>
 #include <spdlog/spdlog.h>
+#include <sharedpp/memory_unit.hpp>
 
 #include <string>
 #include <fstream>
@@ -13,7 +14,7 @@ namespace TunnelBore
     class PipeOperation : public std::enable_shared_from_this<PipeOperation<TunnelSession>>
     {
       public:
-        PipeOperation(TunnelSession* sideOriginal, TunnelSession* sideOther)
+        PipeOperation(std::weak_ptr<TunnelSession> sideOriginal, std::weak_ptr<TunnelSession> sideOther)
             : sideOriginal_(sideOriginal)
             , sideOther_(sideOther)
             , state_(std::make_shared<State>([]() {
@@ -22,7 +23,7 @@ namespace TunnelBore
         {}
         ~PipeOperation()
         {
-            spdlog::info("PipeOperation::~PipeOperation: total transfer: {}", state_->totalTransfer);
+            spdlog::info("PipeOperation::~PipeOperation: total transfer: {}", state_->totalTransfer.toString());
         }
         PipeOperation(PipeOperation const&) = delete;
         PipeOperation(PipeOperation&&) = delete;
@@ -37,7 +38,11 @@ namespace TunnelBore
       private:
         void read()
         {
-            sideOriginal_->socket().async_read_some(
+            auto sideOriginal = sideOriginal_.lock();
+            if (!sideOriginal)
+                return;
+
+            sideOriginal->socket().async_read_some(
                 boost::asio::buffer(state_->buffer),
                 [weakOperation = this->weak_from_this(),
                  state = this->state_](auto const& ec, std::size_t bytesTransferred) {
@@ -50,7 +55,7 @@ namespace TunnelBore
 
                     state->totalTransfer += bytesTransferred;
 
-                    auto sideOriginal = operation->sideOriginal_;
+                    auto sideOriginal = operation->sideOriginal_.lock();
 
                     if (!sideOriginal)
                         return;
@@ -66,16 +71,20 @@ namespace TunnelBore
         }
         void write(std::size_t bytesTransferred, bool close, std::size_t cumulativeOffset = 0, int retries = 0)
         {
-            sideOther_->resetTimer();
+            auto sideOriginal = sideOriginal_.lock();
+            auto sideOther = sideOther_.lock();
+
+            if (sideOther)
+                sideOther->resetTimer();
 
             if (retries > 10)
             {
                 spdlog::error("Too many retries, killing pipe");
 
-                if (sideOriginal_)
-                    sideOriginal_->close();
-                if (sideOther_)
-                    sideOther_->close();
+                if (sideOriginal)
+                    sideOriginal->close();
+                if (sideOther)
+                    sideOther->close();
                 return;
             }
 
@@ -84,15 +93,18 @@ namespace TunnelBore
                 if (bytesTransferred > state_->buffer.size())
                     spdlog::error("bytesTransferred is too large, killing pipe: {}", bytesTransferred);
 
-                if (sideOriginal_)
-                    sideOriginal_->close();
-                if (sideOther_)
-                    sideOther_->close();
+                if (sideOriginal)
+                    sideOriginal->close();
+                if (sideOther)
+                    sideOther->close();
                 return;
             }
 
+            if (!sideOther)
+                return;
+
             boost::asio::async_write(
-                sideOther_->socket(),
+                sideOther->socket(),
                 boost::asio::buffer(state_->buffer.data() + cumulativeOffset, bytesTransferred),
                 [weakOperation = this->weak_from_this(),
                  state = this->state_,
@@ -107,8 +119,8 @@ namespace TunnelBore
                         return;
                     }
 
-                    auto sideOriginal = operation->sideOriginal_;
-                    auto sideOther = operation->sideOther_;
+                    auto sideOriginal = operation->sideOriginal_.lock();
+                    auto sideOther = operation->sideOther_.lock();
 
                     if (bytesWritten > expectedWrittenAmount)
                     {
@@ -163,12 +175,12 @@ namespace TunnelBore
         }
 
       private:
-        TunnelSession* sideOriginal_;
-        TunnelSession* sideOther_;
+        std::weak_ptr<TunnelSession> sideOriginal_;
+        std::weak_ptr<TunnelSession> sideOther_;
         struct State
         {
             std::string buffer;
-            std::size_t totalTransfer;
+            MemoryUnit totalTransfer;
         };
         std::shared_ptr<State> state_;
     };

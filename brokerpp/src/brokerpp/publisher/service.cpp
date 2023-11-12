@@ -138,11 +138,16 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void Service::acceptOnce()
     {
-        spdlog::info("[Service '{}']: Accepting connection.", impl_->serviceId);
-
         std::shared_ptr<boost::asio::ip::tcp::socket> socket =
             std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
 
+        std::scoped_lock lock{impl_->acceptorStopGuard};
+        if (!impl_->acceptor.is_open())
+        {
+            spdlog::info("[Service '{}']: Acceptor is closed, not accepting new connections.", impl_->serviceId);
+            return;
+        }
+        spdlog::info("[Service '{}']: Accepting connection.", impl_->serviceId);
         impl_->acceptor.async_accept(*socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
             const auto acceptorExitLog = Roar::ScopeExit{[weak]() {
                 auto self = weak.lock();

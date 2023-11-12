@@ -30,15 +30,16 @@ namespace TunnelBore::Broker
         TunnelSession& operator=(TunnelSession&&);
 
         void close();
-        void delayedClose();
         void link(TunnelSession& other);
         void peek();
         [[nodiscard]] std::shared_ptr<PipeOperation<TunnelSession>> pipeTo(TunnelSession& other);
         boost::asio::ip::tcp::socket& socket();
         std::string id() const;
         std::string remoteAddress() const;
+        std::recursive_mutex& closeGuard();
 
         void resetTimer();
+        void cancelTimer();
 
       private:
         struct Implementation;

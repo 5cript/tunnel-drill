@@ -38,6 +38,7 @@ namespace TunnelBore::Broker
     {
         std::recursive_mutex closeLock;
         std::recursive_mutex peekBufferLock;
+        std::mutex timerGuard;
         boost::asio::ip::tcp::socket socket;
         std::weak_ptr<ControlSession> controlSession;
         std::string peekBuffer;
@@ -45,6 +46,7 @@ namespace TunnelBore::Broker
         std::string tunnelId;
         std::weak_ptr<Service> service;
         boost::asio::deadline_timer inactivityTimer;
+        bool timerWasCancelled;
         std::atomic_bool wasClosed;
         std::string remoteAddress;
         std::shared_ptr<PipeOperation<TunnelSession>> pipeOperation;
@@ -55,6 +57,8 @@ namespace TunnelBore::Broker
             std::weak_ptr<ControlSession> controlSession,
             std::weak_ptr<Service> service)
             : closeLock{}
+            , peekBufferLock{}
+            , timerGuard{}
             , socket{std::move(socket)}
             , controlSession{std::move(controlSession)}
             , peekBuffer(4096, '\0')
@@ -62,6 +66,7 @@ namespace TunnelBore::Broker
             , tunnelId{std::move(tunnelId)}
             , service{std::move(service)}
             , inactivityTimer{socket.get_executor()}
+            , timerWasCancelled{false}
             , wasClosed{false}
             , remoteAddress{[this]() {
                 auto const& endpoint = this->socket.remote_endpoint();
@@ -104,9 +109,14 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::resetTimer()
     {
-        std::scoped_lock lock{impl_->closeLock};
+        if (impl_->wasClosed)
+            return;
         try
         {
+            std::scoped_lock lock{impl_->timerGuard};
+            if (impl_->timerWasCancelled)
+                return;
+
             impl_->inactivityTimer.expires_from_now(boost::posix_time::seconds(InactivityTimeout.count()));
             impl_->inactivityTimer.async_wait([weak = weak_from_this()](auto const& ec) {
                 if (ec == boost::asio::error::operation_aborted)
@@ -392,51 +402,50 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     std::shared_ptr<PipeOperation<TunnelSession>> TunnelSession::pipeTo(TunnelSession& other)
     {
-        auto pipeOperation = std::make_shared<PipeOperation<TunnelSession>>(this, &other);
+        auto pipeOperation =
+            std::make_shared<PipeOperation<TunnelSession>>(this->weak_from_this(), other.weak_from_this());
         pipeOperation->doPipe();
         return pipeOperation;
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void TunnelSession::delayedClose()
+    void TunnelSession::cancelTimer()
     {
-        auto delayTimer = std::make_shared<boost::asio::deadline_timer>(impl_->socket.get_executor());
-        delayTimer->expires_from_now(boost::posix_time::seconds{3});
-        impl_->inactivityTimer.async_wait([weak = weak_from_this(), delayTimer](auto const& ec) {
-            if (ec == boost::asio::error::operation_aborted)
-                return;
-
-            auto self = weak.lock();
-            if (!self)
-                return;
-
-            self->close();
-        });
+        std::scoped_lock lock{impl_->timerGuard};
+        impl_->inactivityTimer.cancel();
+        impl_->timerWasCancelled = true;
     }
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::close()
     {
-        std::scoped_lock lock{impl_->closeLock};
+        {
+            std::scoped_lock lock{impl_->closeLock};
 
-        if (impl_->wasClosed)
-            return;
-        impl_->wasClosed = true;
+            if (impl_->wasClosed)
+                return;
+            impl_->wasClosed = true;
 
-        spdlog::info("Closing tunnel session '{}'.", impl_->remoteAddress);
+            spdlog::info("Closing tunnel session '{}'.", impl_->remoteAddress);
 
-        boost::system::error_code ignore;
-        impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignore);
+            boost::system::error_code ignore;
+            impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignore);
+        }
 
-        impl_->inactivityTimer.cancel();
+        cancelTimer();
 
         auto service = impl_->service.lock();
         if (!service)
             return;
-
         service->closeTunnelSide(impl_->tunnelId);
+    }
+    //---------------------------------------------------------------------------------------------------------------------
+    std::recursive_mutex& TunnelSession::closeGuard()
+    {
+        return impl_->closeLock;
     }
     //---------------------------------------------------------------------------------------------------------------------
     TunnelSession::~TunnelSession()
     {
+        cancelTimer();
         spdlog::info("Tunnel side destroyed for '{}'", impl_->remoteAddress);
         close();
     }

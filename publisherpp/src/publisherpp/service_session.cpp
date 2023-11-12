@@ -104,7 +104,7 @@ namespace TunnelBore::Publisher
     {
         resetTimer();
 
-        auto pipeOperation = std::make_shared<PipeOperation<ServiceSession>>(this, &other);
+        auto pipeOperation = std::make_shared<PipeOperation<ServiceSession>>(weak_from_this(), other.weak_from_this());
         pipeOperation->doPipe();
         return pipeOperation;
     }

@@ -33,21 +33,8 @@
 
 constexpr static auto IoContextThreadPoolSize = 16;
 
-#if __linux__
-void signalHandler(int signum)
-{
-    // auto trace = std::stacktrace::current();
-    // std::cout << std::to_string(trace) << std::endl;
-    std::exit(signum);
-}
-#endif
-
 int main(int argc, char** argv)
 {
-#if __linux__
-    signal(SIGSEGV, signalHandler);
-#endif
-
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
     sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
