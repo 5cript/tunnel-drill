@@ -23,6 +23,7 @@ namespace TunnelBore
         {}
         ~PipeOperation()
         {
+            close();
             spdlog::info("PipeOperation::~PipeOperation: total transfer: {}", state_->totalTransfer.toString());
         }
         PipeOperation(PipeOperation const&) = delete;

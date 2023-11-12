@@ -417,6 +417,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::close()
     {
+        cancelTimer();
         {
             std::scoped_lock lock{impl_->closeLock};
 
@@ -428,14 +429,18 @@ namespace TunnelBore::Broker
 
             boost::system::error_code ignore;
             impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignore);
-        }
 
-        cancelTimer();
+            if (impl_->pipeOperation)
+            {
+                impl_->pipeOperation->close();
+                impl_->pipeOperation.reset();
+            }
+        }
 
         auto service = impl_->service.lock();
         if (!service)
             return;
-        service->closeTunnelSide(impl_->tunnelId);
+        service->closeTunnelSide(impl_->tunnelId, true);
     }
     //---------------------------------------------------------------------------------------------------------------------
     std::recursive_mutex& TunnelSession::closeGuard()

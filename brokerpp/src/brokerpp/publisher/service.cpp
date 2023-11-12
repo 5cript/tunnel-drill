@@ -128,24 +128,32 @@ namespace TunnelBore::Broker
         return {};
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void Service::closeTunnelSide(std::string const& id)
+    void Service::closeTunnelSide(std::string const& id, bool wasPreclosed)
     {
         std::scoped_lock lock{impl_->sessionGuard};
         spdlog::info("[Service '{}']: Closing tunnel side '{}'.", impl_->serviceId, id);
-        impl_->sessions.erase(id);
+        auto tunnelSide = impl_->sessions.find(id);
+        if (tunnelSide == std::end(impl_->sessions))
+        {
+            spdlog::warn("[Service '{}']: Tunnel side '{}' is already gone.", impl_->serviceId, id);
+            return;
+        }
+        if (!wasPreclosed)
+            tunnelSide->second->close();
+        impl_->sessions.erase(tunnelSide);
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Service::acceptOnce()
     {
-        std::shared_ptr<boost::asio::ip::tcp::socket> socket =
-            std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
-
         std::scoped_lock lock{impl_->acceptorStopGuard};
         if (!impl_->acceptor.is_open())
         {
             spdlog::info("[Service '{}']: Acceptor is closed, not accepting new connections.", impl_->serviceId);
             return;
         }
+
+        std::shared_ptr<boost::asio::ip::tcp::socket> socket =
+            std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
         spdlog::info("[Service '{}']: Accepting connection.", impl_->serviceId);
         impl_->acceptor.async_accept(*socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
             if (ec == boost::asio::error::operation_aborted)

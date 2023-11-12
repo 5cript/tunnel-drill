@@ -38,7 +38,7 @@ namespace TunnelBore::Broker
         Service& operator=(Service const&) = delete;
         Service& operator=(Service&&);
 
-        void closeTunnelSide(std::string const& id);
+        void closeTunnelSide(std::string const& id, bool wasPreclosed = false);
 
         boost::leaf::result<void> start();
         void stop();
