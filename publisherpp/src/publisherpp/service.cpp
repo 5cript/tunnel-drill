@@ -78,6 +78,9 @@ namespace TunnelBore::Publisher
                 if (!it->second.inward->active() && !it->second.outward->active())
                 {
                     spdlog::info("Service session closed: {}", tunnelId);
+                    auto& session = it->second;
+                    session.inwardPipe->close();
+                    session.outwardPipe->close();
                     self->sessions_.erase(it);
                 }
             });

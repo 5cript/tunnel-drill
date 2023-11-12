@@ -35,6 +35,17 @@ namespace TunnelBore
             read();
         }
 
+        void close()
+        {
+            auto sideOriginal = sideOriginal_.lock();
+            auto sideOther = sideOther_.lock();
+
+            if (sideOriginal)
+                sideOriginal->close();
+            if (sideOther)
+                sideOther->close();
+        }
+
       private:
         void read()
         {
