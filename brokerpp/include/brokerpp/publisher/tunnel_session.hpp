@@ -1,5 +1,6 @@
 #pragma once
 
+#include <sharedpp/pipe_operation.hpp>
 #include <brokerpp/authority.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
@@ -32,7 +33,7 @@ namespace TunnelBore::Broker
         void delayedClose();
         void link(TunnelSession& other);
         void peek();
-        void pipeTo(TunnelSession& other);
+        [[nodiscard]] std::shared_ptr<PipeOperation<TunnelSession>> pipeTo(TunnelSession& other);
         boost::asio::ip::tcp::socket& socket();
         std::string id() const;
         std::string remoteAddress() const;

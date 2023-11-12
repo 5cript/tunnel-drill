@@ -43,6 +43,11 @@ namespace TunnelBore::Publisher
         , sendInProgress_{false}
     {}
     //---------------------------------------------------------------------------------------------------------------------
+    Publisher::~Publisher()
+    {
+        spdlog::info("Publisher shutting down");
+    }
+    //---------------------------------------------------------------------------------------------------------------------
     std::shared_ptr<Roar::WebsocketClient>
     Publisher::createWebsocketClient(boost::asio::any_io_executor exec, Config const& cfg)
     {
@@ -181,6 +186,7 @@ namespace TunnelBore::Publisher
                 return;
 
             self->sendQueued({{"type", "Ping"}, {"ref", "Ping"}});
+            spdlog::debug("Ping");
             self->startAliveTimer();
         });
     }
@@ -271,6 +277,7 @@ namespace TunnelBore::Publisher
         }
         else if (type == "Pong")
         {
+            spdlog::debug("Pong");
             // ignore to avoid logspam
         }
         else
@@ -336,8 +343,5 @@ namespace TunnelBore::Publisher
         const auto tunnelToken = json::parse(body)["token"].get<std::string>();
         (*service)->createSession(cfg_.host, tunnelToken, tunnelId);
     }
-    //---------------------------------------------------------------------------------------------------------------------
-    Publisher::~Publisher()
-    {}
     // #####################################################################################################################
 }

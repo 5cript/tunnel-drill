@@ -18,6 +18,11 @@ if (ENABLE_SANITIZERS)
     enable_thread_sanitizer()
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    enable_thread_sanitizer()
+endif()
+
+
 # Inlined Dependencies
 add_subdirectory(dependencies/roar)
 

@@ -4,6 +4,7 @@
 #include <boost/asio/deadline_timer.hpp>
 
 #include <mutex>
+#include <atomic>
 
 namespace TunnelBore::Publisher
 {
@@ -14,7 +15,7 @@ namespace TunnelBore::Publisher
             , onClose{}
             , active{true}
             , inactivityTimer{this->socket.get_executor()}
-            , remoteAddress{[this]{
+            , remoteAddress{[this] {
                 return this->socket.remote_endpoint().address().to_string() + ":" +
                     std::to_string(this->socket.remote_endpoint().port());
             }()}
@@ -22,7 +23,7 @@ namespace TunnelBore::Publisher
         boost::asio::ip::tcp::socket socket;
         std::function<void()> onClose;
         std::recursive_mutex mutex;
-        bool active;
+        std::atomic_bool active;
         boost::asio::deadline_timer inactivityTimer;
         std::string remoteAddress;
     };
@@ -31,6 +32,10 @@ namespace TunnelBore::Publisher
     {}
     ServiceSession::~ServiceSession()
     {
+        {
+            std::scoped_lock lock{impl_->mutex};
+            impl_->inactivityTimer.cancel();
+        }
         spdlog::info("ServiceSession::~ServiceSession: closing session with {}", impl_->remoteAddress);
         close();
     }
@@ -43,20 +48,31 @@ namespace TunnelBore::Publisher
     }
     void ServiceSession::close()
     {
-        std::scoped_lock lock{impl_->mutex};
-        spdlog::info("ServiceSession::close: closing session with {}", impl_->remoteAddress);
-        boost::system::error_code ec;
-        impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-        if (ec && ec != boost::asio::error::not_connected)
+        bool active = false;
         {
-            spdlog::error("ServiceSession::close: socket.shutdown() failed: {}", std::string{ec.message()});
+            std::scoped_lock lock{impl_->mutex};
+            active = impl_->active;
         }
-        impl_->active = false;
+        if (!active)
+            return;
+        {
+            std::scoped_lock lock{impl_->mutex};
+            spdlog::info("ServiceSession::close: closing session with {}", impl_->remoteAddress);
+            boost::system::error_code ec;
+            impl_->socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+            if (ec && ec != boost::asio::error::not_connected)
+            {
+                spdlog::error("ServiceSession::close: socket.shutdown() failed: {}", std::string{ec.message()});
+            }
+        }
+        {
+            std::scoped_lock lock{impl_->mutex};
+            impl_->active = false;
+        }
         impl_->onClose();
     }
     bool ServiceSession::active()
     {
-        std::scoped_lock lock{impl_->mutex};
         return impl_->active;
     }
     void ServiceSession::resetTimer()
@@ -70,7 +86,8 @@ namespace TunnelBore::Publisher
             if (!session)
                 return;
 
-            spdlog::info("ServiceSession::resetTimer: closing session due to inactivity with {}", session->remoteAddress());
+            spdlog::info(
+                "ServiceSession::resetTimer: closing session due to inactivity with {}", session->remoteAddress());
             session->close();
         });
     }
@@ -83,13 +100,12 @@ namespace TunnelBore::Publisher
     {
         return impl_->remoteAddress;
     }
-    void ServiceSession::pipeTo(ServiceSession& other)
+    std::shared_ptr<PipeOperation<ServiceSession>> ServiceSession::pipeTo(ServiceSession& other)
     {
         resetTimer();
 
-        auto pipeOperation =
-            std::make_shared<PipeOperation<ServiceSession>>(shared_from_this(), other.shared_from_this());
-        // pipeOperation self-holds
+        auto pipeOperation = std::make_shared<PipeOperation<ServiceSession>>(this, &other);
         pipeOperation->doPipe();
+        return pipeOperation;
     }
 }

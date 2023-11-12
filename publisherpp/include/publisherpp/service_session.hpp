@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sharedpp/pipe_operation.hpp>
+
 #include <boost/asio/ip/tcp.hpp>
 
 #include <memory>
@@ -22,7 +24,7 @@ namespace TunnelBore::Publisher
         void resetTimer();
         boost::asio::ip::tcp::socket& socket();
         std::string remoteAddress();
-        void pipeTo(ServiceSession& other);
+        [[nodiscard]] std::shared_ptr<PipeOperation<ServiceSession>> pipeTo(ServiceSession& other);
         bool active();
 
       private:

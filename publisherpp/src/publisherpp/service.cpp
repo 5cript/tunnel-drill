@@ -56,7 +56,7 @@ namespace TunnelBore::Publisher
             auto socket = boost::asio::ip::tcp::socket{self->executor_};
             boost::system::error_code ec;
             boost::asio::connect(socket, endpoints, ec);
-            if (ec) 
+            if (ec)
             {
                 spdlog::error("Service::createSession: connect failed: {}", ec.message());
                 return std::shared_ptr<ServiceSession>{};
@@ -68,6 +68,8 @@ namespace TunnelBore::Publisher
                 auto self = weak.lock();
                 if (!self)
                     return;
+
+                std::scoped_lock lock{self->sessionGuard_};
 
                 auto it = self->sessions_.find(tunnelId);
                 if (it == self->sessions_.end())
@@ -82,7 +84,6 @@ namespace TunnelBore::Publisher
             return session;
         };
 
-
         auto prefixedToken = std::make_shared<std::string>(std::string{publisherToBrokerPrefix} + ":" + token);
         auto outwards = createConnection(brokerHost, publicPort_);
         if (!outwards)
@@ -91,7 +92,8 @@ namespace TunnelBore::Publisher
         boost::asio::async_write(
             outwards->socket(),
             boost::asio::buffer(*prefixedToken),
-            [weak = weak_from_this(), outwards, tunnelId, createConnection, prefixedToken](boost::system::error_code ec, std::size_t) {
+            [weak = weak_from_this(), outwards, tunnelId, createConnection, prefixedToken](
+                boost::system::error_code ec, std::size_t) {
                 if (ec)
                 {
                     spdlog::error("Failed to write token to outwards connection: {}", ec.message());
@@ -111,9 +113,14 @@ namespace TunnelBore::Publisher
                     outwards->close();
                     return;
                 }
-                self->sessions_.emplace(tunnelId, ServiceSessionPair{inwards, outwards});
-                inwards->pipeTo(*outwards);
-                outwards->pipeTo(*inwards);
+                {
+                    std::scoped_lock lock{self->sessionGuard_};
+                    auto elem = self->sessions_.emplace(tunnelId, ServiceSessionPair{inwards, outwards, {}, {}});
+
+                    spdlog::info("Connecting pipes");
+                    elem.first->second.inwardPipe = inwards->pipeTo(*outwards);
+                    elem.first->second.outwardPipe = outwards->pipeTo(*inwards);
+                }
             });
     }
 }

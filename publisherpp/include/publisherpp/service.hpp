@@ -15,6 +15,8 @@ namespace TunnelBore::Publisher
         {
             std::shared_ptr<ServiceSession> inward;
             std::shared_ptr<ServiceSession> outward;
+            std::shared_ptr<PipeOperation<ServiceSession>> inwardPipe;
+            std::shared_ptr<PipeOperation<ServiceSession>> outwardPipe;
         };
 
       public:
@@ -55,6 +57,7 @@ namespace TunnelBore::Publisher
         int publicPort_;
         std::string hiddenHost_;
         int hiddenPort_;
+        std::recursive_mutex sessionGuard_;
         std::unordered_map<std::string, ServiceSessionPair> sessions_;
     };
 }

@@ -143,78 +143,82 @@ namespace TunnelBore::Broker
         std::shared_ptr<boost::asio::ip::tcp::socket> socket =
             std::make_shared<boost::asio::ip::tcp::socket>(impl_->acceptor.get_executor());
 
-        impl_->acceptor.async_accept(
-            *socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
-                const auto acceptorExitLog = Roar::ScopeExit{[weak]() {
-                    auto self = weak.lock();
-                    if (!self)
-                        return;
-                    spdlog::info("[Service '{}']: Accepting connection finished.", self->impl_->serviceId);
-                }};
-
+        impl_->acceptor.async_accept(*socket, [weak = weak_from_this(), socket](boost::system::error_code ec) mutable {
+            const auto acceptorExitLog = Roar::ScopeExit{[weak]() {
                 auto self = weak.lock();
                 if (!self)
-                {
-                    spdlog::warn("Service is gone, cannot accept new connections.");
                     return;
-                }
+                spdlog::info("[Service '{}']: Accepting connection finished.", self->impl_->serviceId);
+            }};
 
-                if (ec == boost::asio::error::operation_aborted)
-                {
-                    spdlog::info("[Service '{}']: Acceptor was stopped.", self->impl_->serviceId);
-                    return;
-                }
+            auto self = weak.lock();
+            if (!self)
+            {
+                spdlog::warn("Service is gone, cannot accept new connections.");
+                return;
+            }
 
-                if (ec)
-                {
-                    spdlog::error("[Service '{}']: Could not accept connection: {}", self->impl_->serviceId, ec.message());
-                    return self->acceptOnce();
-                }
+            if (ec == boost::asio::error::operation_aborted)
+            {
+                spdlog::info("[Service '{}']: Acceptor was stopped.", self->impl_->serviceId);
+                return;
+            }
 
-                spdlog::info("[Service '{}']: Accepted connection.", self->impl_->serviceId);
-                std::shared_lock lock{self->impl_->acceptorStopGuard};
+            if (ec)
+            {
+                spdlog::error("[Service '{}']: Could not accept connection: {}", self->impl_->serviceId, ec.message());
+                return self->acceptOnce();
+            }
 
-                spdlog::info("[Service '{}']: Acceptor is open: {}", self->impl_->serviceId, self->impl_->acceptor.is_open());
-                if (!self->impl_->acceptor.is_open())
-                    return;
+            spdlog::info("[Service '{}']: Accepted connection.", self->impl_->serviceId);
+            std::shared_lock lock{self->impl_->acceptorStopGuard};
 
-                auto publisher = self->impl_->publisher.lock();
-                if (!publisher)
-                {
-                    spdlog::warn("[Service '{}']: Publisher is gone, cannot accept new connections.", self->impl_->serviceId);
-                    return;
-                }
+            spdlog::info(
+                "[Service '{}']: Acceptor is open: {}", self->impl_->serviceId, self->impl_->acceptor.is_open());
+            if (!self->impl_->acceptor.is_open())
+                return;
 
-                // cannot accept tunnels, if we cannot communicate with the publisher.
-                auto controlSession = publisher->getCurrentControlSession().lock();
-                if (!controlSession)
-                {
-                    spdlog::warn("[Service '{}']: Control session is gone, cannot accept new connections.", self->impl_->serviceId);
-                    return;
-                }
+            auto publisher = self->impl_->publisher.lock();
+            if (!publisher)
+            {
+                spdlog::warn(
+                    "[Service '{}']: Publisher is gone, cannot accept new connections.", self->impl_->serviceId);
+                return;
+            }
 
-                if (!socket->is_open())
-                {
-                    spdlog::warn("[Service '{}']: Socket is not open, but acceptor did not return an error.", self->impl_->serviceId);
-                    return self->acceptOnce();
-                }
+            // cannot accept tunnels, if we cannot communicate with the publisher.
+            auto controlSession = publisher->getCurrentControlSession().lock();
+            if (!controlSession)
+            {
+                spdlog::warn(
+                    "[Service '{}']: Control session is gone, cannot accept new connections.", self->impl_->serviceId);
+                return;
+            }
 
-                const auto tunnelId = self->impl_->uuidGenerator.generate_id();
-                spdlog::info(
-                    "[Service '{}']: New connection accepted '{}' with tunnelId '{}'.",
-                    self->impl_->serviceId,
-                    socket->remote_endpoint(ec).address().to_string(),
-                    tunnelId);
-                {
-                    std::scoped_lock sessionLock{self->impl_->sessionGuard};
-                    auto tunnelSide =
-                        std::make_shared<TunnelSession>(std::move(*socket), tunnelId, controlSession, self->weak_from_this());
-                    self->impl_->sessions[tunnelId] = std::move(tunnelSide);
-                    self->impl_->sessions[tunnelId]->peek();
-                }
+            if (!socket->is_open())
+            {
+                spdlog::warn(
+                    "[Service '{}']: Socket is not open, but acceptor did not return an error.",
+                    self->impl_->serviceId);
+                return self->acceptOnce();
+            }
 
-                self->acceptOnce();
-            });
+            const auto tunnelId = self->impl_->uuidGenerator.generate_id();
+            spdlog::info(
+                "[Service '{}']: New connection accepted '{}' with tunnelId '{}'.",
+                self->impl_->serviceId,
+                socket->remote_endpoint(ec).address().to_string(),
+                tunnelId);
+            {
+                std::scoped_lock sessionLock{self->impl_->sessionGuard};
+                auto tunnelSide = std::make_shared<TunnelSession>(
+                    std::move(*socket), tunnelId, controlSession, self->weak_from_this());
+                self->impl_->sessions[tunnelId] = std::move(tunnelSide);
+                self->impl_->sessions[tunnelId]->peek();
+            }
+
+            self->acceptOnce();
+        });
     }
     //---------------------------------------------------------------------------------------------------------------------
     void Service::stop()

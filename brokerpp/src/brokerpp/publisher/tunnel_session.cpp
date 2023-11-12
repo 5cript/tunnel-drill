@@ -47,6 +47,7 @@ namespace TunnelBore::Broker
         boost::asio::deadline_timer inactivityTimer;
         std::atomic_bool wasClosed;
         std::string remoteAddress;
+        std::shared_ptr<PipeOperation<TunnelSession>> pipeOperation;
 
         Implementation(
             boost::asio::ip::tcp::socket&& socket,
@@ -68,6 +69,7 @@ namespace TunnelBore::Broker
                 auto const& port = endpoint.port();
                 return address.to_string() + ":" + std::to_string(port);
             }()}
+            , pipeOperation{}
         {}
     };
     // #####################################################################################################################
@@ -103,7 +105,8 @@ namespace TunnelBore::Broker
     void TunnelSession::resetTimer()
     {
         std::scoped_lock lock{impl_->closeLock};
-        try {
+        try
+        {
             impl_->inactivityTimer.expires_from_now(boost::posix_time::seconds(InactivityTimeout.count()));
             impl_->inactivityTimer.async_wait([weak = weak_from_this()](auto const& ec) {
                 if (ec == boost::asio::error::operation_aborted)
@@ -118,7 +121,8 @@ namespace TunnelBore::Broker
 
                 if (ec)
                 {
-                    spdlog::warn("Inactivity timer for tunnel '{}' error: '{}'.", self->impl_->remoteAddress, ec.message());
+                    spdlog::warn(
+                        "Inactivity timer for tunnel '{}' error: '{}'.", self->impl_->remoteAddress, ec.message());
                     self->close();
                     return;
                 }
@@ -133,7 +137,9 @@ namespace TunnelBore::Broker
                     self->close();
                 }
             });
-        } catch (std::exception const& exc) {
+        }
+        catch (std::exception const& exc)
+        {
             spdlog::error(
                 "Exception in attempt to reset inactivity timer for tunnel '{}': '{}'",
                 impl_->remoteAddress,
@@ -146,11 +152,14 @@ namespace TunnelBore::Broker
     {
         resetTimer();
 
-        try {
+        try
+        {
             impl_->socket.async_read_some(
                 boost::asio::buffer(impl_->peekBuffer, impl_->peekBuffer.size()),
                 [weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytesTransferred) {
-                    auto exitLog = Roar::ScopeExit{[]() { spdlog::info("Peek read finished."); }};
+                    auto exitLog = Roar::ScopeExit{[]() {
+                        spdlog::info("Peek read finished.");
+                    }};
 
                     spdlog::info("Peek read for tunnel side of size '{}'.", bytesTransferred);
 
@@ -176,7 +185,8 @@ namespace TunnelBore::Broker
                     if (ec)
                     {
                         spdlog::warn(
-                            "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this side "
+                            "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this "
+                            "side "
                             "of the tunnel '{}': '{}'",
                             info.name ? *info.name : "noname",
                             info.publicPort,
@@ -200,7 +210,8 @@ namespace TunnelBore::Broker
                     if (bytesTransferred == 0)
                     {
                         spdlog::warn(
-                            "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this side "
+                            "Initial read for tunnel side failed, for service '{}:{}->{}', this will terminate this "
+                            "side "
                             "of the tunnel '{}': '{}'",
                             info.name ? *info.name : "noname",
                             info.publicPort,
@@ -218,7 +229,8 @@ namespace TunnelBore::Broker
                             if (self->impl_->peekBuffer.size() < publisherToBrokerPrefix.size() + 1)
                             {
                                 spdlog::warn(
-                                    "Invalid initial message for tunnel side, this will terminate this side of the tunnel "
+                                    "Invalid initial message for tunnel side, this will terminate this side of the "
+                                    "tunnel "
                                     "'{}'",
                                     self->impl_->remoteAddress);
                                 self->close();
@@ -226,7 +238,8 @@ namespace TunnelBore::Broker
                             }
 
                             self->impl_->peekBuffer = self->impl_->peekBuffer.substr(
-                                publisherToBrokerPrefix.size() + 1, bytesTransferred - publisherToBrokerPrefix.size() - 1);
+                                publisherToBrokerPrefix.size() + 1,
+                                bytesTransferred - publisherToBrokerPrefix.size() - 1);
 
                             // {identity, tunnelId, serviceId, hiddenPort, publicPort}
                             auto token = controlSession->verifyPublisherIdentity(self->impl_->peekBuffer);
@@ -255,7 +268,8 @@ namespace TunnelBore::Broker
                                 return;
                             }
 
-                            service->connectTunnels(token->claims()["tunnelId"].get<std::string>(), self->impl_->tunnelId);
+                            service->connectTunnels(
+                                token->claims()["tunnelId"].get<std::string>(), self->impl_->tunnelId);
                             return;
                         }
                         catch (std::exception const& exc)
@@ -289,11 +303,10 @@ namespace TunnelBore::Broker
                     spdlog::info("Informing publisher about connection");
                     controlSession->informAboutConnection(service->serviceId(), self->impl_->tunnelId);
                 });
-        } catch (std::exception const& exc) {
-            spdlog::error(
-                "Exception in attempt to read from tunnel '{}': '{}'",
-                impl_->remoteAddress,
-                exc.what());
+        }
+        catch (std::exception const& exc)
+        {
+            spdlog::error("Exception in attempt to read from tunnel '{}': '{}'", impl_->remoteAddress, exc.what());
             close();
         }
     }
@@ -316,7 +329,8 @@ namespace TunnelBore::Broker
         // Self -> Other
         if (!impl_->peekBuffer.empty())
         {
-            try {
+            try
+            {
                 boost::asio::async_write(
                     other.impl_->socket,
                     boost::asio::buffer(impl_->peekBuffer),
@@ -331,23 +345,23 @@ namespace TunnelBore::Broker
                             otherSelf->close();
                             return;
                         }
-                        self->pipeTo(*otherSelf);
+                        self->impl_->pipeOperation = self->pipeTo(*otherSelf);
                     });
-            } catch (std::exception const& exc) {
-                spdlog::error(
-                    "Exception in attempt to write to tunnel '{}': '{}'",
-                    impl_->remoteAddress,
-                    exc.what());
+            }
+            catch (std::exception const& exc)
+            {
+                spdlog::error("Exception in attempt to write to tunnel '{}': '{}'", impl_->remoteAddress, exc.what());
                 close();
             }
         }
         else
-            pipeTo(other);
+            impl_->pipeOperation = pipeTo(other);
 
         // Other -> Self
         if (!other.impl_->peekBuffer.empty())
         {
-            try {
+            try
+            {
                 boost::asio::async_write(
                     impl_->socket,
                     boost::asio::buffer(other.impl_->peekBuffer),
@@ -362,26 +376,25 @@ namespace TunnelBore::Broker
                             otherSelf->close();
                             return;
                         }
-                        otherSelf->pipeTo(*self);
+                        otherSelf->impl_->pipeOperation = otherSelf->pipeTo(*self);
                     });
-            } catch (std::exception const& exc) {
+            }
+            catch (std::exception const& exc)
+            {
                 spdlog::error(
-                    "Exception in attempt to write to tunnel '{}': '{}'",
-                    other.impl_->remoteAddress,
-                    exc.what());
+                    "Exception in attempt to write to tunnel '{}': '{}'", other.impl_->remoteAddress, exc.what());
                 other.close();
             }
         }
         else
-            other.pipeTo(*this);
+            other.impl_->pipeOperation = other.pipeTo(*this);
     }
     //---------------------------------------------------------------------------------------------------------------------
-    void TunnelSession::pipeTo(TunnelSession& other)
+    std::shared_ptr<PipeOperation<TunnelSession>> TunnelSession::pipeTo(TunnelSession& other)
     {
-        auto pipeOperation =
-            std::make_shared<PipeOperation<TunnelSession>>(shared_from_this(), other.shared_from_this());
-        // pipeOperation self-holds
+        auto pipeOperation = std::make_shared<PipeOperation<TunnelSession>>(this, &other);
         pipeOperation->doPipe();
+        return pipeOperation;
     }
     //---------------------------------------------------------------------------------------------------------------------
     void TunnelSession::delayedClose()
@@ -424,6 +437,7 @@ namespace TunnelBore::Broker
     //---------------------------------------------------------------------------------------------------------------------
     TunnelSession::~TunnelSession()
     {
+        spdlog::info("Tunnel side destroyed for '{}'", impl_->remoteAddress);
         close();
     }
     //---------------------------------------------------------------------------------------------------------------------

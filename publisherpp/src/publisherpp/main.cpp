@@ -18,49 +18,43 @@ constexpr static auto IoContextThreadPoolSize = 16;
 
 int main()
 {
-    using namespace TunnelBore;
-    using namespace TunnelBore::Publisher;
-    using namespace std::string_literals;
+    {
+        using namespace TunnelBore;
+        using namespace TunnelBore::Publisher;
+        using namespace std::string_literals;
 
-    setupHome();
+        setupHome();
 
-    std::vector<spdlog::sink_ptr> sinks;
-    sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
-    sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
-        Roar::resolvePath("~/.tbore/publisher/logs/log").string(),
-        23,
-        59
-    ));
-    auto combined_logger = std::make_shared<spdlog::logger>(
-        "name",
-        begin(sinks),
-        end(sinks)
-    );
-    spdlog::register_logger(combined_logger);
-    spdlog::flush_on(spdlog::level::warn);
-    spdlog::set_level(spdlog::level::info);
-    spdlog::flush_every(std::chrono::seconds(10));
+        std::vector<spdlog::sink_ptr> sinks;
+        sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_st>());
+        sinks.push_back(std::make_shared<spdlog::sinks::daily_file_sink_st>(
+            Roar::resolvePath("~/.tbore/publisher/logs/log").string(), 23, 59));
+        auto combined_logger = std::make_shared<spdlog::logger>("name", begin(sinks), end(sinks));
+        spdlog::register_logger(combined_logger);
+        spdlog::flush_on(spdlog::level::warn);
+        spdlog::set_level(spdlog::level::info);
+        spdlog::flush_every(std::chrono::seconds(10));
 
-    boost::asio::thread_pool pool{IoContextThreadPoolSize};
-    const auto shutdownPool = Roar::ScopeExit{[&pool]() {
-        pool.stop();
-        pool.join();
-    }};
+        boost::asio::thread_pool pool{IoContextThreadPoolSize};
+        const auto shutdownPool = Roar::ScopeExit{[&pool]() {
+            pool.stop();
+            pool.join();
+        }};
 
-    spdlog::info("Config files are at '{}'", getHomePath().string());
+        spdlog::info("Config files are at '{}'", getHomePath().string());
 
-    const auto config = loadConfig();
+        const auto config = loadConfig();
 
-    if (!config.ssl)
-        spdlog::warn("SSL is disabled! This is only for testing purposes!");
+        if (!config.ssl)
+            spdlog::warn("SSL is disabled! This is only for testing purposes!");
 
-    auto publisher = std::make_shared<class Publisher>(pool.executor(), config);
-    publisher->authenticate();
+        auto publisher = std::make_shared<class Publisher>(pool.executor(), config);
+        publisher->authenticate();
 
-    // Wait for signal:
-    //Roar::shutdownBarrier.wait();
-    std::cin.get();
+        // Wait for signal:
+        Roar::shutdownBarrier.wait();
 
-    spdlog::info("Shutting down...");
+        spdlog::info("Shutting down...");
+    }
     spdlog::shutdown();
 }
